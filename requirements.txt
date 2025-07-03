@@ -1,0 +1,5 @@
+azure-storage-blob==12.19.1
+streamlit
+python-dotenv>=1.0.0
+azure-cosmos==4.11.0
+
