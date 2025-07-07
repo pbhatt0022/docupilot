@@ -2,6 +2,7 @@ import os
 from azure.ai.formrecognizer import DocumentAnalysisClient
 from azure.core.credentials import AzureKeyCredential
 from typing import Tuple, Dict, List
+from difflib import get_close_matches
 
 # Initialize Form Recognizer client
 endpoint = os.getenv("FORM_RECOGNIZER_ENDPOINT")
@@ -33,8 +34,74 @@ MODEL_MAP = {
     # For custom models, use the model ID. For now, fallback to prebuilt-document.
     "Salary Slip": "prebuilt-document",
     "Loan Application Form": "prebuilt-document",
+    "Form 16": "prebuilt-document",
     # Add more as needed
 }
+
+# Add a mapping for common field name variations for all document types
+FIELD_NAME_MAP = {
+    "Aadhaar Card": {
+        "First Name": "FirstName",
+        "Last Name": "LastName",
+        "DOB": "DateOfBirth",
+        "Aadhaar Number": "DocumentNumber",
+        "Address": "Address"
+    },
+    "PAN Card": {
+        "First Name": "FirstName",
+        "Last Name": "LastName",
+        "Date of Birth": "DateOfBirth",
+        "PAN": "DocumentNumber"
+    },
+    "Passport": {
+        "First Name": "FirstName",
+        "Last Name": "LastName",
+        "Date of Birth": "DateOfBirth",
+        "Passport Number": "DocumentNumber",
+        "Expiry": "ExpiryDate"
+    },
+    "VoterID": {
+        "First Name": "FirstName",
+        "Last Name": "LastName",
+        "Voter ID": "DocumentNumber",
+        "Address": "Address"
+    },
+    "Driving License": {
+        "First Name": "FirstName",
+        "Last Name": "LastName",
+        "DOB": "DateOfBirth",
+        "License Number": "DocumentNumber",
+        "Expiry": "ExpiryDate"
+    },
+    "Bank Statement": {
+        "Account Number": "AccountNumber",
+        "IFSC Code": "IFSC",
+        "Bank Name": "BankName"
+    },
+    "Salary Slip": {
+        "Employee Name": "EmployeeName",
+        "Employer Name": "EmployerName",
+        "Net Salary": "NetSalary",
+        "Month": "Month",
+        "Year": "Year"
+    },
+    "Loan Application Form": {
+        "Applicant Name": "ApplicantName",
+        "Loan Amount": "LoanAmount",
+        "Application Date": "ApplicationDate"
+    },
+    "Form 16": {
+        "Employee Name": "EmployeeName",
+        "Employer Name": "EmployerName",
+        "Assessment Year": "AssessmentYear",
+        "Gross Salary": "GrossSalary",
+        "Tax Deducted": "TaxDeducted"
+    },
+    # Add more as needed
+}
+
+def normalize_field_name(name):
+    return ''.join(name.lower().split())
 
 def extract_text_from_blob_url(blob_url: str) -> str:
     """
@@ -63,6 +130,8 @@ def extract_fields_with_model(file_path: str, doc_type: str):
     """
     model = MODEL_MAP.get(doc_type, "prebuilt-document")
     must_have = MUST_HAVE_FIELDS.get(doc_type, [])
+    field_map = FIELD_NAME_MAP.get(doc_type, {})
+    must_have_normalized = [normalize_field_name(f) for f in must_have]
 
     with open(file_path, "rb") as f:
         poller = fr_client.begin_analyze_document(model, document=f)
@@ -75,9 +144,32 @@ def extract_fields_with_model(file_path: str, doc_type: str):
     if result.documents:
         for document in result.documents:
             for name, field in document.fields.items():
-                extracted[name] = field.value
+                # Normalize and map field names
+                norm_name = normalize_field_name(name)
+                # Try direct mapping from model output
+                canonical_name = field_map.get(name)
+                if not canonical_name:
+                    # Try normalized mapping
+                    for k, v in field_map.items():
+                        if normalize_field_name(k) == norm_name:
+                            canonical_name = v
+                            break
+                if not canonical_name:
+                    # Try fuzzy match with must_have fields
+                    match = get_close_matches(norm_name, must_have_normalized, n=1, cutoff=0.8)
+                    if match:
+                        idx = must_have_normalized.index(match[0])
+                        canonical_name = must_have[idx]
+                if not canonical_name:
+                    # Fallback to normalized name if nothing matches
+                    canonical_name = name.replace(" ", "")
+                extracted[canonical_name] = field.value
 
-        # Check must-have fields
+        # Debug print statements
+        print("Raw extracted fields from Azure model:", [(name, field.value) for document in result.documents for name, field in document.fields.items()])
+        print("Final mapped/normalized extracted fields:", extracted)
+
+        # Check must-have fields (using normalization)
         for must in must_have:
             if not extracted.get(must):
                 missing_fields.append(must)

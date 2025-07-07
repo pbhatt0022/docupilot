@@ -108,6 +108,14 @@ if not filtered_df.empty:
         else:
             st.info("No missing fields detected.")
 
+    # Display extracted fields for the selected document
+    extracted = row.get("extracted_fields", {})
+    if extracted:
+        st.subheader("Extracted Fields")
+        st.table(pd.DataFrame(list(extracted.items()), columns=["Field", "Value"]))
+    else:
+        st.warning("⚠️ No extracted data available.")
+
     view_option = st.radio(
         "View Options", ["Raw Document", "Extracted Information"], key=f"view_{row['id']}"
     )
