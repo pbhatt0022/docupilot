@@ -26,10 +26,11 @@ You must classify the following document into one of these types:
 - Bank Statement
 - Offer Letter
 - Cancelled Cheque
-- ITR
+- ITR (Income Tax Return)
 - Consent Form
 - FATCA
 - Loan Application Form
+- Form 16
 - Others
 
 Instructions:

@@ -1,7 +1,7 @@
 import os
 import uuid
 import json
-from datetime import datetime, timezone
+import datetime
 from dotenv import load_dotenv
 import streamlit as st
 from PyPDF2 import PdfReader
@@ -10,6 +10,9 @@ from azure.cosmos import CosmosClient, PartitionKey
 from azure.ai.formrecognizer import DocumentAnalysisClient
 from azure.core.credentials import AzureKeyCredential
 from classification import classify_document
+from azure_extraction import extract_text_from_blob_url, extract_fields_with_model
+import tempfile
+import os
 
 # Load environment variables
 load_dotenv()
@@ -101,6 +104,31 @@ if st.checkbox("✅ I confirm my uploads are correct."):
                     "reason": f"Classification failed: {str(e)}"
                 }
 
+            # Use system temp directory for saving the file
+            temp_dir = tempfile.gettempdir()
+            temp_path = os.path.join(temp_dir, file_obj.name)
+            with open(temp_path, "wb") as temp_file:
+                temp_file.write(file_obj.getbuffer())
+
+            # Extract structured fields and check completeness
+            try:
+                extracted_fields, is_complete, missing_fields, flagged_by_ai, flagged_reason = extract_fields_with_model(temp_path, classification["document_type"])
+            except Exception as e:
+                extracted_fields = {}
+                is_complete = False
+                missing_fields = []
+                flagged_by_ai = True
+                flagged_reason = f"Extraction failed: {str(e)}"
+
+            def serialize_dates_in_dict(d):
+                for k, v in d.items():
+                    if isinstance(v, (datetime.date, datetime.datetime)):
+                        d[k] = v.isoformat()
+                return d
+
+            # Convert all date/datetime objects in extracted_fields to strings
+            extracted_fields = serialize_dates_in_dict(extracted_fields)
+
             metadata = {
                 "id": str(uuid.uuid4()),
                 "applicant_id": applicant_id,
@@ -108,13 +136,22 @@ if st.checkbox("✅ I confirm my uploads are correct."):
                 "original_label": label,
                 "predicted_classification": classification["document_type"],
                 "reasoning": classification["reason"],
-                "upload_time": datetime.now(timezone.utc).isoformat(),
+                "upload_time": datetime.datetime.now(datetime.timezone.utc).isoformat(),
                 "blob_path": blob_path,
-                "file_name": file_obj.name
+                "file_name": file_obj.name,
+                "status": "incomplete" if not is_complete else "pending_review",
+                "officer_comments": "",            
+                "last_updated": datetime.datetime.now(datetime.timezone.utc).isoformat(),
+                "reviewed_by": "officer_001",          
+                "flagged_by_ai": flagged_by_ai,
+                "flagged_reason": flagged_reason,
+                "extracted_fields": extracted_fields,
+                "is_complete": is_complete,
+                "missing_fields": missing_fields
             }
             container.upsert_item(metadata)
 
-        st.success("✅ Documents uploaded and classified successfully!")
+        st.success("✅ Documents uploaded, classified, and extracted successfully!")
         st.balloons()
 else:
     st.warning("Please confirm uploads before submitting.")
