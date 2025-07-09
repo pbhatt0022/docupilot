@@ -116,6 +116,12 @@ if not filtered_df.empty:
     else:
         st.warning("⚠️ No extracted data available.")
 
+    # Display raw extracted fields for the selected document
+    raw_extracted = row.get("raw_extracted_fields", {})
+    if raw_extracted:
+        st.subheader("Raw Extracted Fields (from Azure)")
+        st.table(pd.DataFrame(list(raw_extracted.items()), columns=["Raw Field Name", "Value"]))
+
     view_option = st.radio(
         "View Options", ["Raw Document", "Extracted Information"], key=f"view_{row['id']}"
     )

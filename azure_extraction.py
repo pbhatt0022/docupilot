@@ -20,7 +20,22 @@ MUST_HAVE_FIELDS = {
     "Salary Slip": ["EmployeeName", "EmployerName", "NetSalary", "Month", "Year"],
     "Loan Application Form": ["ApplicantName", "LoanAmount", "ApplicationDate"],
     "Form 16": ["EmployeeName", "EmployerName", "AssessmentYear", "GrossSalary", "TaxDeducted"],
-    # Add more as needed
+    "Offer Letter": ["EmployeeName", "EmployerName", "DateOfJoining", "Position"],
+    "Cancelled Cheque": ["AccountNumber", "IFSC", "BankName"],
+    "Income Tax Return": ["AssessmentYear", "PAN", "GrossIncome"],
+    "Consent Form": ["ApplicantName", "ConsentType", "Date"],
+    "FATCA Declaration": ["ApplicantName", "NRIStatus", "DeclarationDate"],
+    "Employment Certificate": ["EmployeeName", "EmployerName", "EmploymentStatus", "IssueDate"],
+    "Employee ID": ["EmployeeName", "EmployerName", "EmployeeIDNumber"],
+    "Increment Letter": ["EmployeeName", "EmployerName", "IncrementDate", "NewSalary"],
+    "Appraisal Letter": ["EmployeeName", "EmployerName", "AppraisalPeriod", "AppraisalResult"],
+    "Proof of Residence": ["ApplicantName", "Address", "DocumentType"],
+    "Photograph": ["ApplicantName", "Photo"],
+    "Co-Applicant Document": ["CoApplicantName", "Relationship", "DocumentType"],
+    "Credit Report": ["ApplicantName", "CreditScore", "ReportDate"],
+    "Insurance Proof": ["ApplicantName", "PolicyNumber", "Insurer", "SumAssured"],
+    "Digital Consent": ["ApplicantName", "ConsentType", "Date"],
+    "Video KYC": ["ApplicantName", "VideoLink", "CaptureDate"],
 }
 
 # Map document types to Form Recognizer models
@@ -31,11 +46,25 @@ MODEL_MAP = {
     "VoterID": "prebuilt-idDocument",
     "Driving License": "prebuilt-idDocument",
     "Bank Statement": "prebuilt-bankStatement",
-    # For custom models, use the model ID. For now, fallback to prebuilt-document.
     "Salary Slip": "prebuilt-document",
     "Loan Application Form": "prebuilt-document",
     "Form 16": "prebuilt-document",
-    # Add more as needed
+    "Offer Letter": "prebuilt-document",
+    "Cancelled Cheque": "prebuilt-document",
+    "Income Tax Return": "prebuilt-document",
+    "Consent Form": "prebuilt-document",
+    "FATCA Declaration": "prebuilt-document",
+    "Employment Certificate": "prebuilt-document",
+    "Employee ID": "prebuilt-document",
+    "Increment Letter": "prebuilt-document",
+    "Appraisal Letter": "prebuilt-document",
+    "Proof of Residence": "prebuilt-document",
+    "Photograph": "prebuilt-document",
+    "Co-Applicant Document": "prebuilt-document",
+    "Credit Report": "prebuilt-document",
+    "Insurance Proof": "prebuilt-document",
+    "Digital Consent": "prebuilt-document",
+    "Video KYC": "prebuilt-document",
 }
 
 # Add a mapping for common field name variations for all document types
@@ -97,11 +126,113 @@ FIELD_NAME_MAP = {
         "Gross Salary": "GrossSalary",
         "Tax Deducted": "TaxDeducted"
     },
-    # Add more as needed
+    "Offer Letter": {
+        "Employee Name": "EmployeeName",
+        "Employer Name": "EmployerName",
+        "Date of Joining": "DateOfJoining",
+        "Position": "Position"
+    },
+    "Cancelled Cheque": {
+        "Account Number": "AccountNumber",
+        "IFSC Code": "IFSC",
+        "Bank Name": "BankName"
+    },
+    "Income Tax Return": {
+        "Assessment Year": "AssessmentYear",
+        "PAN": "PAN",
+        "Gross Income": "GrossIncome"
+    },
+    "Consent Form": {
+        "Applicant Name": "ApplicantName",
+        "Consent Type": "ConsentType",
+        "Date": "Date"
+    },
+    "FATCA Declaration": {
+        "Applicant Name": "ApplicantName",
+        "NRI Status": "NRIStatus",
+        "Declaration Date": "DeclarationDate"
+    },
+    "Employment Certificate": {
+        "Employee Name": "EmployeeName",
+        "Employer Name": "EmployerName",
+        "Employment Status": "EmploymentStatus",
+        "Issue Date": "IssueDate"
+    },
+    "Employee ID": {
+        "Employee Name": "EmployeeName",
+        "Employer Name": "EmployerName",
+        "Employee ID Number": "EmployeeIDNumber"
+    },
+    "Increment Letter": {
+        "Employee Name": "EmployeeName",
+        "Employer Name": "EmployerName",
+        "Increment Date": "IncrementDate",
+        "New Salary": "NewSalary"
+    },
+    "Appraisal Letter": {
+        "Employee Name": "EmployeeName",
+        "Employer Name": "EmployerName",
+        "Appraisal Period": "AppraisalPeriod",
+        "Appraisal Result": "AppraisalResult"
+    },
+    "Proof of Residence": {
+        "Applicant Name": "ApplicantName",
+        "Address": "Address",
+        "Document Type": "DocumentType"
+    },
+    "Photograph": {
+        "Applicant Name": "ApplicantName",
+        "Photo": "Photo"
+    },
+    "Co-Applicant Document": {
+        "Co-Applicant Name": "CoApplicantName",
+        "Relationship": "Relationship",
+        "Document Type": "DocumentType"
+    },
+    "Credit Report": {
+        "Applicant Name": "ApplicantName",
+        "Credit Score": "CreditScore",
+        "CIBIL Score": "CreditScore",
+        "Report Date": "ReportDate"
+    },
+    "Insurance Proof": {
+        "Applicant Name": "ApplicantName",
+        "Policy Number": "PolicyNumber",
+        "Insurer": "Insurer",
+        "Sum Assured": "SumAssured"
+    },
+    "Digital Consent": {
+        "Applicant Name": "ApplicantName",
+        "Consent Type": "ConsentType",
+        "Date": "Date"
+    },
+    "Video KYC": {
+        "Applicant Name": "ApplicantName",
+        "Video Link": "VideoLink",
+        "Capture Date": "CaptureDate"
+    },
 }
 
 def normalize_field_name(name):
     return ''.join(name.lower().split())
+
+def to_json_serializable(val):
+    # Recursively convert DocumentField, date, datetime, and lists/dicts to JSON-serializable values
+    try:
+        from azure.ai.formrecognizer import DocumentField
+    except ImportError:
+        DocumentField = None
+    import datetime
+    if DocumentField and isinstance(val, DocumentField):
+        return to_json_serializable(val.value)
+    elif isinstance(val, dict):
+        return {k: to_json_serializable(v) for k, v in val.items()}
+    elif isinstance(val, list):
+        return [to_json_serializable(v) for v in val]
+    elif isinstance(val, (datetime.date, datetime.datetime)):
+        return val.isoformat()
+    else:
+        return val
 
 def extract_text_from_blob_url(blob_url: str) -> str:
     """
@@ -138,12 +269,14 @@ def extract_fields_with_model(file_path: str, doc_type: str):
         result = poller.result()
 
     extracted = {}
+    raw_extracted = {}
     missing_fields = []
     is_complete = True
 
     if result.documents:
         for document in result.documents:
             for name, field in document.fields.items():
+                raw_extracted[name] = to_json_serializable(field.value)
                 # Normalize and map field names
                 norm_name = normalize_field_name(name)
                 # Try direct mapping from model output
@@ -163,10 +296,11 @@ def extract_fields_with_model(file_path: str, doc_type: str):
                 if not canonical_name:
                     # Fallback to normalized name if nothing matches
                     canonical_name = name.replace(" ", "")
-                extracted[canonical_name] = field.value
+                extracted[canonical_name] = to_json_serializable(field.value)
 
         # Debug print statements
-        print("Raw extracted fields from Azure model:", [(name, field.value) for document in result.documents for name, field in document.fields.items()])
+        print(f"Starting extraction for {file_path}, doc_type={doc_type}")
+        print("Raw extracted fields from Azure model:", raw_extracted)
         print("Final mapped/normalized extracted fields:", extracted)
 
         # Check must-have fields (using normalization)
@@ -196,4 +330,4 @@ def extract_fields_with_model(file_path: str, doc_type: str):
         flagged_by_ai = False
         flagged_reason = "All required fields are present. No issues detected by AI."
 
-    return extracted, is_complete, missing_fields, flagged_by_ai, flagged_reason 
+    return extracted, is_complete, missing_fields, flagged_by_ai, flagged_reason, raw_extracted 

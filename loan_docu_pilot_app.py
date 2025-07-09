@@ -46,20 +46,51 @@ applicant_id = st.session_state["applicant_id"]
 st.markdown(f"**Your Application ID:** `{applicant_id}`")
 
 categories = {
-    "KYC": ["Aadhaar Card", "PAN Card", "Address Proof"],
-    "Income Proof": ["Salary Slip", "Form 16", "ITR"],
-    "Banking": ["Bank Statement", "Cancelled Cheque"],
-    "Employment": ["Offer Letter", "Employee ID"],
-    "Loan Forms": ["Loan Application Form", "Consent Form", "FATCA"],
-    "Optional": ["Co-Applicant ID", "Insurance"]
+    "KYC Documents": [
+        ("Aadhaar Card", "Government-issued unique identity card"),
+        ("PAN Card", "Permanent Account Number for tax purposes"),
+        ("Passport", "Valid Indian passport (as address or identity proof)"),
+        ("VoterID", "Voter ID card (as address or identity proof)"),
+        ("Driving License", "Valid driving license (as address or identity proof)")
+    ],
+    "Income Proof": [
+        ("Salary Slip", "Last 3–6 months' salary slips"),
+        ("Form 16", "Annual Form 16 from employer"),
+        ("Income Tax Return", "Last 1–3 years' ITR documents"),
+        ("Bank Statement", "Salary or main account statement for last 3–6 months")
+    ],
+    "Employment Verification": [
+        ("Offer Letter", "For new employees joining the company"),
+        ("Employment Certificate", "Certificate of employment from employer"),
+        ("Employee ID", "Official employee ID card"),
+        ("Increment Letter", "Latest increment letter"),
+        ("Appraisal Letter", "Latest appraisal letter")
+    ],
+    "Banking and Loan-Related": [
+        ("Cancelled Cheque", "For ECS mandate"),
+        ("Loan Application Form", "With applicant declaration and loan details"),
+        ("Consent Form", "For CIBIL check and data access"),
+        ("FATCA Declaration", "For NRIs or regulatory compliance")
+    ],
+    "Other Supporting Documents": [
+        ("Proof of Residence", "E.g., electricity bill, rent agreement, etc."),
+        ("Photograph", "Passport-size photograph"),
+        ("Co-Applicant Document", "Same as above, if applicable")
+    ],
+    "Optional": [
+        ("Credit Report", "CIBIL or Experian report"),
+        ("Insurance Proof", "If bundled with loan"),
+        ("Digital Consent", "For eKYC"),
+        ("Video KYC", "Geo-tagged selfie or video KYC")
+    ]
 }
 
 st.subheader("📤 Upload Your Documents")
 uploaded_files = {}
 for group, docs in categories.items():
     st.markdown(f"### 📁 {group}")
-    for doc in docs:
-        file = st.file_uploader(f"{doc}:", type=["pdf", "jpg", "jpeg", "png"], key=f"{group}_{doc}")
+    for doc, help_text in docs:
+        file = st.file_uploader(f"{doc}:", type=["pdf", "jpg", "jpeg", "png"], key=f"{group}_{doc}", help=help_text)
         if file:
             uploaded_files[f"{group}-{doc}"] = file
 
@@ -112,13 +143,15 @@ if st.checkbox("✅ I confirm my uploads are correct."):
 
             # Extract structured fields and check completeness
             try:
-                extracted_fields, is_complete, missing_fields, flagged_by_ai, flagged_reason = extract_fields_with_model(temp_path, classification["document_type"])
+                extracted_fields, is_complete, missing_fields, flagged_by_ai, flagged_reason, raw_extracted = extract_fields_with_model(temp_path, classification["document_type"])
             except Exception as e:
+                print(f"Extraction failed for {file_obj.name} ({classification['document_type']}): {e}")
                 extracted_fields = {}
                 is_complete = False
                 missing_fields = []
                 flagged_by_ai = True
                 flagged_reason = f"Extraction failed: {str(e)}"
+                raw_extracted = {}
 
             def serialize_dates_in_dict(d):
                 for k, v in d.items():
@@ -126,8 +159,9 @@ if st.checkbox("✅ I confirm my uploads are correct."):
                         d[k] = v.isoformat()
                 return d
 
-            # Convert all date/datetime objects in extracted_fields to strings
+            # Convert all date/datetime objects in extracted_fields and raw_extracted to strings
             extracted_fields = serialize_dates_in_dict(extracted_fields)
+            raw_extracted = serialize_dates_in_dict(raw_extracted)
 
             metadata = {
                 "id": str(uuid.uuid4()),
@@ -147,7 +181,8 @@ if st.checkbox("✅ I confirm my uploads are correct."):
                 "flagged_reason": flagged_reason,
                 "extracted_fields": extracted_fields,
                 "is_complete": is_complete,
-                "missing_fields": missing_fields
+                "missing_fields": missing_fields,
+                "raw_extracted_fields": raw_extracted
             }
             container.upsert_item(metadata)
 
