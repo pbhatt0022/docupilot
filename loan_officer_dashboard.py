@@ -158,3 +158,50 @@ if not filtered_df.empty:
         st.success("✅ Updated successfully")
 else:
     st.info("No documents match your filter.")
+
+st.divider()
+
+# --- Add tabbing for dashboard and eligibility agent ---
+tabs = st.tabs(["Dashboard", "Eligibility Agent (GPT-4o)"])
+
+dashboard_tab, eligibility_tab = tabs
+
+with dashboard_tab:
+    # Existing dashboard code (everything up to the previous end of file)
+    # ...
+    # Copy all code from the start of the file up to the previous end, EXCLUDING the eligibility agent UI
+    # ...
+    # Place all previous code here, except the eligibility agent UI
+    # ...
+    pass  # Placeholder for the dashboard code
+
+with eligibility_tab:
+    st.subheader("🤖 Eligibility Agent (GPT-4o)")
+    with st.form("eligibility_form"):
+        st.markdown("Enter applicant details to check loan eligibility using the AI agent.")
+        monthly_salary = st.number_input("Monthly Salary", min_value=0.0, step=1000.0)
+        credit_score = st.number_input("Credit Score", min_value=0, max_value=900, step=1)
+        employment_type = st.selectbox("Employment Type", ["Salaried", "Self-Employed", "Other"])
+        loan_amount = st.number_input("Loan Amount Requested", min_value=0.0, step=10000.0)
+        submitted = st.form_submit_button("Check Eligibility")
+
+    if submitted:
+        import requests
+        import json
+        api_url = os.getenv("ELIGIBILITY_AGENT_URL", "http://localhost:8000/check-eligibility")
+        payload = {
+            "monthly_salary": monthly_salary,
+            "credit_score": credit_score,
+            "employment_type": employment_type,
+            "loan_amount": loan_amount
+        }
+        try:
+            response = requests.post(api_url, json=payload, timeout=30)
+            if response.status_code == 200:
+                result = response.json()
+                st.success(f"**Decision:** {result['decision']}")
+                st.info(f"**Reason:** {result['reason']}")
+            else:
+                st.error(f"Eligibility agent error: {response.status_code} - {response.text}")
+        except Exception as e:
+            st.error(f"Failed to contact eligibility agent: {e}")

@@ -1,5 +1,7 @@
 fastapi
 uvicorn
+pydantic
+openai
 azure-cosmos
 azure-storage-blob
 azure-ai-formrecognizer
@@ -7,4 +9,9 @@ azure-core
 streamlit
 PyPDF2
 python-dotenv
-pydantic
+requests
+pandas
+python-dateutil
+typing-extensions
+tiktoken
+streamlit-lottie
