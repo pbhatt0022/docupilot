@@ -120,10 +120,7 @@ if st.session_state["processing"]:
         file_obj.seek(0)
         with open(temp_path, "wb") as temp_file:
             temp_file.write(file_obj.getbuffer())
-        file_obj.seek(0)
-        blob_path = f"{applicant_id}/{file_obj.name}"
-        blob_client = blob_service_client.get_blob_client(container=BLOB_CONTAINER_NAME, blob=blob_path)
-        blob_client.upload_blob(file_obj, overwrite=True)
+
         file_obj.seek(0)
         text = ""
         try:
@@ -141,6 +138,13 @@ if st.session_state["processing"]:
                 "document_type": "Others",
                 "reason": f"Classification failed: {str(e)}"
             }
+        
+        file_obj.seek(0)
+        classified_document = classification['document_type']
+        blob_path = f"{applicant_id}/{classified_document}/{file_obj.name}"
+        blob_client = blob_service_client.get_blob_client(container=BLOB_CONTAINER_NAME, blob=blob_path)
+        blob_client.upload_blob(file_obj, overwrite=True)
+        
         try:
             extracted_fields, is_complete, missing_fields, flagged_by_ai, flagged_reason, raw_extracted = extract_fields_with_model(temp_path, classification["document_type"])
         except Exception as e:

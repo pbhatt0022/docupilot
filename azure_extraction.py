@@ -3,6 +3,8 @@ from azure.ai.formrecognizer import DocumentAnalysisClient
 from azure.core.credentials import AzureKeyCredential
 from typing import Tuple, Dict, List
 from difflib import get_close_matches
+from dotenv import load_dotenv
+load_dotenv()
 
 # Initialize Form Recognizer client
 endpoint = os.getenv("FORM_RECOGNIZER_ENDPOINT")

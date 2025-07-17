@@ -15,3 +15,8 @@ python-dateutil
 typing-extensions
 tiktoken
 streamlit-lottie
+azure-functions
+azure-search-documents
+PyMuPDF
+pillow
+pytesseract
