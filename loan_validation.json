@@ -1,0 +1,15 @@
+{
+  "interest_rate": 10.0,
+  "min_loan_amount": 50000,
+  "max_loan_amount": 5000000,
+  "min_tenure_months": 12,
+  "max_tenure_months": 240,
+  "loan_purposes": [
+    "Home Renovation",
+    "Education",
+    "Medical",
+    "Business",
+    "Personal",
+    "Other"
+  ]
+} 

@@ -482,8 +482,9 @@ def extract_fields_with_model(file_path: str, doc_type: str):
                             break
 
         # Check must-have fields (using normalization)
+        extracted_keys_norm = {normalize_field_name(k) for k in extracted.keys()}
         for must in must_have:
-            if not extracted.get(must):
+            if normalize_field_name(must) not in extracted_keys_norm:
                 missing_fields.append(must)
                 is_complete = False
     else:
