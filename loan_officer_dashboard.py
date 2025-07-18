@@ -54,7 +54,8 @@ st.divider()
 # Filter section
 st.subheader("🔍 Filter & Review Documents")
 applicant_filter = st.selectbox("Filter by Applicant ID", ["All"] + sorted(df["applicant_id"].unique().tolist()))
-doc_type_filter = st.selectbox("Filter by Document Type", ["All"] + sorted(df["predicted_classification"].unique().tolist()))
+doc_types = [x for x in df["predicted_classification"].unique().tolist() if isinstance(x, str)]
+doc_type_filter = st.selectbox("Filter by Document Type", ["All"] + sorted(doc_types))
 status_filter = st.selectbox("Filter by Document Status", ["All", "pending_review", "approved", "incomplete"])
 
 filtered_df = df.copy()
@@ -81,7 +82,11 @@ if not filtered_df.empty:
     selected_file = st.selectbox(
         "Select a document to review",
         options=doc_options,
-        format_func=lambda x: f"{x} ({table_df.loc[table_df['file_name'] == x, 'predicted_classification'].values[0]})"
+        format_func=lambda x: (
+            f"{x} ({table_df.loc[table_df['file_name'] == x, 'predicted_classification'].values[0]})"
+            if not table_df.loc[table_df['file_name'] == x, 'predicted_classification'].empty
+            else f"{x} (Unknown)"
+        )
     )
 
     # Get the full row for the selected document
