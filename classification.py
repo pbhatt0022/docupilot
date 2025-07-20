@@ -5,8 +5,8 @@ from openai import AzureOpenAI
 import os
 
 client = AzureOpenAI(
-    api_key=os.getenv("AZURE_OPENAI_API_KEY"),
-    azure_endpoint=os.getenv("AZURE_OPENAI_ENDPOINT"),
+    api_key=os.getenv("CHAT_API_KEY"),
+    azure_endpoint=os.getenv("CHAT_ENDPOINT"),
     api_version="2024-02-15-preview"  # or your required version
 )
 
