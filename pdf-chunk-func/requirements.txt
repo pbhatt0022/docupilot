@@ -1,9 +1,0 @@
-azure-functions
-azure-search-documents
-PyMuPDF
-pillow
-pytesseract
-tiktoken
-azure-core
-python-dotenv
-openai
