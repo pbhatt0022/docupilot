@@ -132,12 +132,6 @@ if page == "Upload Documents":
             with open(temp_path, "wb") as temp_file:
                 temp_file.write(file_obj.getbuffer())
             file_obj.seek(0)
-            # Use new blob path format: applicant_id/document_type/filename
-            document_type = classification["document_type"]
-            blob_path = f"{applicant_id}/{document_type}/{file_obj.name}"
-            blob_client = blob_service_client.get_blob_client(container=BLOB_CONTAINER_NAME, blob=blob_path)
-            blob_client.upload_blob(file_obj, overwrite=True)
-            file_obj.seek(0)
             text = ""
             try:
                 poller = form_recognizer.begin_analyze_document("prebuilt-document", file_obj)
@@ -154,6 +148,12 @@ if page == "Upload Documents":
                     "document_type": "Others",
                     "reason": f"Classification failed: {str(e)}"
                 }
+            document_type = classification["document_type"]
+            # Use RAG blob path format: applicant_id/document_type/filename
+            blob_path = f"{applicant_id}/{document_type}/{file_obj.name}"
+            blob_client = blob_service_client.get_blob_client(container=BLOB_CONTAINER_NAME, blob=blob_path)
+            blob_client.upload_blob(file_obj, overwrite=True)
+            file_obj.seek(0)
             try:
                 extracted_fields, is_complete, missing_fields, flagged_by_ai, flagged_reason, raw_extracted = extract_fields_with_model(temp_path, classification["document_type"])
             except Exception as e:
@@ -299,3 +299,29 @@ elif page == "Loan Application":
             container.upsert_item(final_dict)
             st.balloons()
             st.success("🎉 Loan application submitted successfully!")
+
+    # After the loan application form, add eligibility check UI
+    st.markdown("---")
+    st.subheader("Eligibility Check")
+    from agents.data.cosmos_utils import all_required_docs_present
+    docs_ready = all_required_docs_present(applicant_id)
+    if not docs_ready:
+        st.warning("Eligibility check requires all 5 required documents to be uploaded and processed.")
+    if st.button("Run Eligibility Check", key="eligibility_check_btn", disabled=not docs_ready):
+        import requests
+        try:
+            response = requests.post(
+                "http://localhost:8000/check-eligibility",
+                json={"applicant_id": applicant_id},
+                timeout=30
+            )
+            if response.status_code == 200:
+                result = response.json()
+                st.success(f"\u2705 Decision: {result.get('decision', 'N/A')}")
+                st.metric("Confidence Score", result.get("score", 'N/A'))
+                if result.get("report_url"):
+                    st.markdown(f"[\ud83d\udcc4 View Full Report]({result['report_url']})")
+            else:
+                st.error(f"\u274C Eligibility agent error: {response.status_code} - {response.text}")
+        except Exception as e:
+            st.error(f"\u274C Failed to contact eligibility agent: {e}")

@@ -1,15 +1,13 @@
 import json
-from openai import OpenAI
+from dotenv import load_dotenv
+load_dotenv()
+from openai import AzureOpenAI
 import os
 
-# For GitHub-hosted models like gpt-4o
-OPENAI_ENDPOINT = "https://models.github.ai/inference"
-OPENAI_MODEL = "openai/gpt-4o"
-OPENAI_TOKEN = os.getenv("GITHUB_TOKEN")
-
-client = OpenAI(
-    base_url=OPENAI_ENDPOINT,
-    api_key=OPENAI_TOKEN,
+client = AzureOpenAI(
+    api_key=os.getenv("AZURE_OPENAI_API_KEY"),
+    azure_endpoint=os.getenv("AZURE_OPENAI_ENDPOINT"),
+    api_version="2024-02-15-preview"  # or your required version
 )
 
 def classify_document(text: str) -> dict:
@@ -266,7 +264,7 @@ Response:
 
     try:
         response = client.chat.completions.create(
-            model=OPENAI_MODEL,
+            model="gpt-4o",  # Use your Azure deployment name here
             messages=[
                 {"role": "system", "content": system_message},
                 {"role": "user", "content": user_prompt}
