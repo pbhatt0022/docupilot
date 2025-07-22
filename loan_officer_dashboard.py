@@ -490,6 +490,25 @@ elif st.session_state.active_tab == 1:
         filtered_doc_df = filtered_doc_df[filtered_doc_df["status"] == status_filter]
     if doc_type_filter != "All Types":
         filtered_doc_df = filtered_doc_df[filtered_doc_df["predicted_classification"] == doc_type_filter]
+
+    # --- Chatbot Pop-up State Management ---
+    import importlib
+    chatbot_module = importlib.import_module("application_review_chatbot")
+    if "chatbot_popup_open" not in st.session_state:
+        st.session_state.chatbot_popup_open = False
+    if "chatbot_applicant_context" not in st.session_state:
+        st.session_state.chatbot_applicant_context = None
+    if "chatbot_applicant_id" not in st.session_state:
+        st.session_state.chatbot_applicant_id = None
+    if "chatbot_messages" not in st.session_state:
+        st.session_state.chatbot_messages = []
+
+    # If applicant_filter changes, update context
+    if st.session_state.chatbot_applicant_id != applicant_filter:
+        st.session_state.chatbot_applicant_context = chatbot_module.get_applicant_information(applicant_filter)
+        st.session_state.chatbot_applicant_id = applicant_filter
+        st.session_state.chatbot_messages = []
+
     
     # Two-column layout for document list and details
     col_list, col_detail = st.columns([1, 2])
@@ -522,6 +541,12 @@ elif st.session_state.active_tab == 1:
             st.markdown('</div>', unsafe_allow_html=True)
         else:
             st.info("No documents match your filters.")
+        
+        # --- Chatbot Pop-up Button ---
+        st.markdown("<br>", unsafe_allow_html=True)
+        # Use a regular Streamlit button for chatbot pop-up (no custom CSS/JS for button)
+        if st.button("💬 Application Chatbot", key="open_chatbot_popup", help="Ask questions about the selected applicant's documents"):
+            st.session_state.chatbot_popup_open = True
     
     with col_detail:
         st.markdown('<div class="section-header">Document Details</div>', unsafe_allow_html=True)
@@ -622,6 +647,30 @@ elif st.session_state.active_tab == 1:
             st.markdown('<div class="card-container">', unsafe_allow_html=True)
             st.info("👈 Select a document from the list to view details")
             st.markdown('</div>', unsafe_allow_html=True)
+            
+    # --- Chatbot Expander (Clean UI) ---
+    if st.session_state.chatbot_popup_open:
+        with st.expander("💬 Application Chatbot", expanded=True):
+            # Display chat history
+            for msg in st.session_state.chatbot_messages:
+                if msg["role"] == "user":
+                    st.markdown(f'<div style="background:#deecf9;color:#323130;border-radius:10px 10px 0 10px;padding:0.5rem 0.9rem;margin-bottom:0.5rem;align-self:flex-end;max-width:90%;">{msg["content"]}</div>', unsafe_allow_html=True)
+                else:
+                    st.markdown(f'<div style="background:#f3f2f1;color:#323130;border-radius:10px 10px 10px 0;padding:0.5rem 0.9rem;margin-bottom:0.5rem;align-self:flex-start;max-width:90%;">{msg["content"]}</div>', unsafe_allow_html=True)
+            # Input box
+            with st.form(key="chatbot_input_form", clear_on_submit=True):
+                user_prompt = st.text_input("Ask a question about the applicant's documents...", key="chatbot_input")
+                submitted = st.form_submit_button("Send")
+                if submitted and user_prompt.strip():
+                    st.session_state.chatbot_messages.append({"role": "user", "content": user_prompt.strip()})
+                    with st.spinner("Thinking..."):
+                        try:
+                            answer = chatbot_module.get_response(user_prompt.strip(), st.session_state.chatbot_applicant_context)
+                        except Exception as e:
+                            answer = f"Error: {e}"
+                    st.session_state.chatbot_messages.append({"role": "assistant", "content": answer})
+            if st.button("Close Chatbot", key="close_chatbot_popup_expander"):
+                st.session_state.chatbot_popup_open = False
 
 # TAB 3: AI TOOLS
 elif st.session_state.active_tab == 2:
