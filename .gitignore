@@ -11,5 +11,7 @@ __pycache__/
 # Ignore Streamlit-specific folders (optional)
 .streamlit/
 
-# Ignore environment configs
+# Environment files
 .env
+.env.*
+local.settings.json

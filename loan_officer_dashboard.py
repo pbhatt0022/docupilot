@@ -1,21 +1,32 @@
+import sys
+import os
+sys.path.append(os.path.dirname(os.path.abspath(__file__)))
+
 import streamlit as st
+from streamlit_extras.metric_cards import style_metric_cards
+from streamlit_extras.switch_page_button import switch_page
+from streamlit_extras.stoggle import stoggle
+from st_aggrid import AgGrid, GridOptionsBuilder
+from streamlit_lottie import st_lottie
 from azure.cosmos import CosmosClient, PartitionKey
 from azure.storage.blob import BlobServiceClient
 from dotenv import load_dotenv
-import os
 import pandas as pd
 from datetime import datetime
 import difflib
 import re
 import requests
-from streamlit_lottie import st_lottie
 import json
 import math
+import base64
+
+# Load environment variables from .env file at the very top
+from dotenv import load_dotenv
+load_dotenv()
 
 # RAG-related imports
 import openai
 from openai import AzureOpenAI
-# Assuming rag_pipeline.py is in the same directory or accessible via PYTHONPATH
 from rag_pipeline import get_embedding, search_vector_top_k, clean_chunks, build_context, get_answer
 
 # Load Lottie animation for feedback (if available)
@@ -26,374 +37,188 @@ try:
 except Exception:
     pass
 
-# Clean, professional CSS focused on banking UI/UX
+# Microsoft Fluent UI color palette
+PRIMARY_BLUE = "#0078D4"
+NEUTRAL_GREY = "#F3F2F1"
+DARK_GREY = "#605E5C"
+WHITE = "#FFFFFF"
+
+# Custom CSS for Microsoft look
 st.markdown(
-    """
+    f"""
     <style>
-    /* Import Microsoft Fluent UI fonts */
-    @import url('https://fonts.googleapis.com/css2?family=Segoe+UI:wght@300;400;500;600;700&display=swap');
-    
-    /* Global Styles */
-    .stApp {
-        background-color: #f8f9fa;
-        font-family: 'Segoe UI', -apple-system, BlinkMacSystemFont, 'Roboto', 'Helvetica Neue', sans-serif;
-    }
-    
-    .block-container {
-        padding: 1.5rem 2rem;
-        max-width: 1400px;
-    }
-    
-    /* Clean Header */
-    .main-header {
-        background: white;
-        color: #323130;
-        padding: 2rem;
-        border-radius: 8px;
+    html, body, [class*='css']  {{
+        font-family: 'Segoe UI', 'Roboto', 'Helvetica Neue', Arial, sans-serif;
+        background-color: {NEUTRAL_GREY};
+    }}
+    .stApp {{
+        background-color: {NEUTRAL_GREY};
+    }}
+    .main-header {{
+        background: {WHITE};
+        color: {DARK_GREY};
+        padding: 2rem 2rem 1rem 2rem;
+        border-radius: 10px;
         margin-bottom: 1.5rem;
-        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
-        border-left: 4px solid #0078d4;
-    }
-    
-    .main-header h1 {
-        margin: 0;
-        font-size: 1.75rem;
-        font-weight: 600;
-        color: #323130;
-    }
-    
-    .main-header p {
-        margin: 0.5rem 0 0 0;
-        font-size: 0.9rem;
-        color: #605e5c;
-        font-weight: 400;
-    }
-    
-    /* Clean Tab Navigation */
-    .tab-container {
-        background: white;
-        border-radius: 8px;
-        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
-        margin-bottom: 1.5rem;
-        overflow: hidden;
-    }
-    
-    .tab-button {
-        background: transparent;
-        border: none;
-        padding: 1rem 1.5rem;
-        font-size: 0.9rem;
-        font-weight: 500;
-        color: #605e5c;
-        cursor: pointer;
-        transition: all 0.2s ease;
-        border-bottom: 3px solid transparent;
-    }
-    
-    .tab-button.active {
-        color: #0078d4;
-        border-bottom: 3px solid #0078d4;
-        background: #f8f9fa;
-    }
-    
-    .tab-button:hover:not(.active) {
-        background: #f3f2f1;
-        color: #323130;
-    }
-    
-    /* Simplified Cards */
-    .metric-card {
-        background: white;
-        border-radius: 8px;
-        padding: 1.5rem;
-        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
-        border: 1px solid #edebe9;
-        transition: all 0.2s ease;
-        text-align: center;
-    }
-    
-    .metric-card:hover {
-        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
-        transform: translateY(-1px);
-    }
-    
-    .metric-title {
-        color: #605e5c;
-        font-size: 0.8rem;
-        font-weight: 500;
-        text-transform: uppercase;
-        letter-spacing: 0.5px;
-        margin-bottom: 0.5rem;
-    }
-    
-    .metric-value {
-        color: #0078d4;
-        font-size: 1.8rem;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.04);
+        border-left: 5px solid {PRIMARY_BLUE};
+    }}
+    .main-header h1 {{
+        font-size: 2rem;
         font-weight: 700;
-        line-height: 1.2;
-    }
-    
-    .metric-icon {
-        font-size: 1.2rem;
-        margin-bottom: 0.5rem;
-        opacity: 0.7;
-    }
-    
-    /* Clean Card Containers */
-    .card-container {
-        background: white;
-        border-radius: 8px;
+        margin: 0;
+        color: {PRIMARY_BLUE};
+    }}
+    .main-header p {{
+        font-size: 1rem;
+        color: {DARK_GREY};
+        margin: 0.5rem 0 0 0;
+    }}
+    .card-container {{
+        background: {WHITE};
+        border-radius: 10px;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.04);
         padding: 1.5rem;
-        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
-        border: 1px solid #edebe9;
         margin-bottom: 1.5rem;
-    }
-    
-    /* Section Headers */
-    .section-header {
-        color: #323130;
-        font-size: 1.1rem;
+        border: 1px solid #E1DFDD;
+    }}
+    .section-header {{
+        color: {PRIMARY_BLUE};
+        font-size: 1.2rem;
         font-weight: 600;
-        margin: 0 0 1rem 0;
+        margin-bottom: 1rem;
+        border-bottom: 2px solid #E1DFDD;
         padding-bottom: 0.5rem;
-        border-bottom: 1px solid #edebe9;
-    }
-    
-    /* Clean Buttons */
-    .stButton > button {
-        background: #0078d4;
-        color: white;
-        border: none;
+    }}
+    .stButton > button {{
+        background: {PRIMARY_BLUE};
+        color: {WHITE};
         border-radius: 4px;
         font-weight: 500;
         padding: 0.6rem 1.2rem;
-        font-size: 0.85rem;
-        transition: all 0.2s ease;
-        box-shadow: 0 1px 3px rgba(0, 120, 212, 0.3);
+        font-size: 1rem;
+        border: none;
+        box-shadow: 0 1px 3px rgba(0,120,212,0.08);
         min-height: 36px;
-    }
-    
-    .stButton > button:hover {
+    }}
+    .stButton > button:hover {{
         background: #106ebe;
-        box-shadow: 0 2px 6px rgba(0, 120, 212, 0.4);
-        transform: translateY(-1px);
-    }
-    
-    .stButton > button[kind="secondary"] {
-        background: white;
-        color: #0078d4;
-        border: 1px solid #0078d4;
-        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
-    }
-    
-    .stButton > button[kind="secondary"]:hover {
-        background: #f8f9fa;
-        border-color: #106ebe;
-        color: #106ebe;
-    }
-    
-    /* Form Controls */
-    .stSelectbox > div > div {
+        color: {WHITE};
+    }}
+    .stSelectbox > div > div {{
         border-radius: 4px;
         border: 1px solid #d2d0ce;
         min-height: 36px;
-        font-size: 0.9rem;
-    }
-    
-    .stSelectbox > div > div:focus-within {
-        border-color: #0078d4;
-        box-shadow: 0 0 0 1px #0078d4;
-    }
-    
-    .stTextInput > div > input {
+        font-size: 1rem;
+    }}
+    .stTextInput > div > input {{
         border-radius: 4px;
         border: 1px solid #d2d0ce;
         min-height: 36px;
         padding: 0.5rem 0.75rem;
-        font-size: 0.9rem;
-    }
-    
-    .stTextInput > div > input:focus {
-        border-color: #0078d4;
-        box-shadow: 0 0 0 1px #0078d4;
+        font-size: 1rem;
+    }}
+    .stTextInput > div > input:focus {{
+        border-color: {PRIMARY_BLUE};
+        box-shadow: 0 0 0 1px {PRIMARY_BLUE};
         outline: none;
-    }
-    
-    /* Status Badges */
-    .status-badge {
-        display: inline-flex;
-        align-items: center;
-        padding: 0.25rem 0.6rem;
-        border-radius: 12px;
-        font-size: 0.7rem;
-        font-weight: 600;
-        text-transform: uppercase;
-        letter-spacing: 0.3px;
-    }
-    
-    .status-approved {
-        background: #dff6dd;
-        color: #107c10;
-    }
-    
-    .status-pending {
-        background: #fff4ce;
-        color: #8a6914;
-    }
-    
-    .status-incomplete {
-        background: #fde7e9;
-        color: #a80000;
-    }
-    
-    .status-flagged {
-        background: #fde7e9;
-        color: #a80000;
-    }
-    
-    /* Document List */
-    .document-item {
-        background: white;
-        border: 1px solid #edebe9;
-        border-radius: 6px;
-        padding: 1rem;
-        margin-bottom: 0.75rem;
-        cursor: pointer;
-        transition: all 0.2s ease;
-    }
-    
-    .document-item:hover {
-        border-color: #0078d4;
-        box-shadow: 0 2px 6px rgba(0, 0, 0, 0.1);
-    }
-    
-    .document-item.selected {
-        border-color: #0078d4;
-        background: #f8f9ff;
-        box-shadow: 0 0 0 1px #0078d4;
-    }
-    
-    .doc-name {
-        font-weight: 500;
-        color: #323130;
-        margin-bottom: 0.25rem;
-        font-size: 0.9rem;
-    }
-    
-    .doc-meta {
-        font-size: 0.75rem;
-        color: #605e5c;
-        margin-bottom: 0.5rem;
-    }
-    
-    /* Alert Styles */
-    .alert {
+    }}
+    .alert {{
         padding: 0.75rem 1rem;
-        border-radius: 6px;
+        border-radius: 8px;
         margin: 1rem 0;
-        border-left: 3px solid;
-        font-size: 0.85rem;
-    }
-    
-    .alert-success {
+        border-left: 4px solid {PRIMARY_BLUE};
+        font-size: 1rem;
+        background: #deecf9;
+        color: #005a9e;
+    }}
+    .alert-success {{
         background: #dff6dd;
         border-left-color: #107c10;
         color: #107c10;
-    }
-    
-    .alert-warning {
-        background: #fff4ce;
-        border-left-color: #ffb900;
-        color: #8a6914;
-    }
-    
-    .alert-error {
+    }}
+    .alert-error {{
         background: #fde7e9;
         border-left-color: #d13438;
         color: #a80000;
-    }
-    
-    .alert-info {
+    }}
+    .alert-info {{
         background: #deecf9;
-        border-left-color: #0078d4;
+        border-left-color: {PRIMARY_BLUE};
         color: #005a9e;
-    }
-    
-    /* DataFrames */
-    .stDataFrame {
-        background: white;
-        border-radius: 6px;
-        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
-        border: 1px solid #edebe9;
-        overflow: hidden;
-    }
-    
-    /* Chat Container */
-    .chat-container {
-        background: white;
-        border: 1px solid #edebe9;
-        border-radius: 6px;
-        height: 400px;
-        overflow-y: auto;
-        padding: 1rem;
-        margin-bottom: 1rem;
-    }
-    
-    /* Spacing Improvements */
-    .stMetric {
-        background: white;
-        border-radius: 8px;
-        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
-        padding: 1.5rem;
-        border: 1px solid #edebe9;
+    }}
+    .metric-card {{
+        background: {WHITE};
+        border-radius: 10px;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.04);
+        padding: 1.2rem 1rem;
         text-align: center;
-    }
-    
-    .stMetric:hover {
-        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
-        transform: translateY(-1px);
-    }
-    
-    .stMetric [data-testid="metric-container"] > div:first-child {
-        color: #605e5c;
-        font-size: 0.8rem;
+        border: 1px solid #E1DFDD;
+        margin-bottom: 1rem;
+    }}
+    .metric-title {{
+        color: {DARK_GREY};
+        font-size: 0.9rem;
         font-weight: 500;
-        text-transform: uppercase;
-        letter-spacing: 0.5px;
-    }
-    
-    .stMetric [data-testid="metric-container"] > div:nth-child(2) {
-        color: #0078d4;
-        font-size: 1.8rem;
+        margin-bottom: 0.5rem;
+    }}
+    .metric-value {{
+        color: {PRIMARY_BLUE};
+        font-size: 2rem;
         font-weight: 700;
-    }
-    
-    /* Hide Streamlit branding */
-    #MainMenu {visibility: hidden;}
-    footer {visibility: hidden;}
-    header {visibility: hidden;}
-    
-    /* Responsive Design */
-    @media (max-width: 768px) {
-        .block-container {
-            padding: 1rem;
-        }
-        
-        .main-header {
+    }}
+    .metric-icon {{
+        font-size: 1.5rem;
+        margin-bottom: 0.5rem;
+        opacity: 0.8;
+    }}
+    .stDataFrame {{
+        background: {WHITE};
+        border-radius: 8px;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.04);
+        border: 1px solid #E1DFDD;
+        overflow: hidden;
+    }}
+    .ai-tool-widget {{
+        background-color: {WHITE};
+        border: 1px solid #E1DFDD;
+        border-radius: 10px;
             padding: 1.5rem;
-        }
-        
-        .metric-card {
-            padding: 1rem;
-        }
-    }
+        margin-bottom: 1.5rem;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.04);
+        min-height: 350px; /* Ensures consistent tile height */
+    }}
+    .ai-tool-widget h3 {{
+        font-size: 1.2rem;
+        font-weight: 600;
+        color: {PRIMARY_BLUE};
+        margin-top: 0;
+        padding-bottom: 0.5rem;
+        border-bottom: 2px solid #E1DFDD;
+    }}
+    .ai-tool-widget p {{
+        font-size: 1rem;
+        color: {DARK_GREY};
+        margin-bottom: 1.5rem;
+    }}
+    .clickable-widget {{
+        cursor: pointer;
+        transition: all 0.2s ease-in-out;
+    }}
+    .clickable-widget:hover {{
+        transform: translateY(-2px);
+        box-shadow: 0 4px 12px rgba(0,0,0,0.08);
+    }}
+    .active-widget {{
+        border: 2px solid {PRIMARY_BLUE};
+        box-shadow: 0 4px 12px rgba(0, 120, 212, 0.2);
+    }}
     </style>
     """,
     unsafe_allow_html=True,
 )
 
 # Load environment variables
-load_dotenv()
 COSMOS_ENDPOINT = os.getenv("COSMOS_ENDPOINT")
 COSMOS_KEY = os.getenv("COSMOS_KEY")
 COSMOS_DB_NAME = "LoanApplicationDB"
@@ -523,6 +348,15 @@ def process_rag_query(question):
         return answer, file_set
     except Exception as e:
         return f"Error processing query: {str(e)}", set()
+
+def verify_document_via_api(document_id, query, api_url="http://localhost:8000/verify"):
+    payload = {"document_id": document_id, "query": query}
+    try:
+        response = requests.post(api_url, json=payload, timeout=30)
+        response.raise_for_status()
+        return response.json()
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
 
 # Initialize active tab in session state if not exists
 if "active_tab" not in st.session_state:
@@ -791,99 +625,117 @@ elif st.session_state.active_tab == 1:
 
 # TAB 3: AI TOOLS
 elif st.session_state.active_tab == 2:
-    st.markdown('<div class="section-header">AI Eligibility Assessment</div>', unsafe_allow_html=True)
-    
-    st.markdown('<div class="card-container">', unsafe_allow_html=True)
-    
-    st.markdown("""
-    The AI eligibility agent will analyze the applicant's documents and loan application to provide 
-    a comprehensive eligibility assessment with confidence scoring.
-    """)
-    
-    col1, col2 = st.columns([3, 1])
-    
-    with col1:
-        all_applicants = sorted(set(doc_df["applicant_id"].unique().tolist() + loan_app_df["applicant_id"].unique().tolist()))
-        selected_applicant = st.selectbox(
-            "Applicant ID for Evaluation",
-            [""] + all_applicants,
-            key="eligibility_applicant"
-        )
-    
-    with col2:
-        st.markdown("<br>", unsafe_allow_html=True)
-        run_assessment = st.button(
-            "🔍 Run Assessment",
-            disabled=not selected_applicant,
-            type="primary",
-            use_container_width=True
-        )
-    
-    if run_assessment and selected_applicant:
-        with st.spinner("Running AI eligibility assessment..."):
-            try:
-                response = requests.post(
-                    "http://localhost:8000/check-eligibility",
-                    json={"applicant_id": selected_applicant},
-                    timeout=30
-                )
-                
-                if response.status_code == 200:
-                    result = response.json()
-                    
-                    # Display results
-                    st.markdown("---")
-                    st.markdown("### 📊 Assessment Results")
-                    
-                    col1, col2, col3 = st.columns(3)
-                    
-                    with col1:
-                        decision = result.get('decision', 'Unknown')
-                        if decision.lower() == 'approved':
-                            st.markdown(
-                                f'<div class="alert alert-success"><strong>Decision:</strong> ✅ {decision}</div>',
-                                unsafe_allow_html=True
-                            )
-                        else:
-                            st.markdown(
-                                f'<div class="alert alert-error"><strong>Decision:</strong> ❌ {decision}</div>',
-                                unsafe_allow_html=True
-                            )
-                    
-                    with col2:
-                        score = result.get('score', 0)
-                        st.metric("Confidence Score", f"{score}%")
-                    
-                    with col3:
-                        report_url = result.get('report_url', '#')
-                        st.markdown(f"[📄 View Full Report]({report_url})")
-                    
-                    # Reasoning
-                    reasoning = result.get('reasoning', 'No reasoning provided')
-                    st.markdown("**AI Reasoning:**")
-                    st.markdown(
-                        f'<div class="alert alert-info">{reasoning}</div>',
-                        unsafe_allow_html=True
+    st.markdown('<div class="section-header">AI Tools</div>', unsafe_allow_html=True)
+
+    with st.expander("📊 Eligibility Assessment"):
+        st.markdown("<p>Analyzes an applicant's documents to provide a comprehensive eligibility assessment and confidence score.</p>", unsafe_allow_html=True)
+        all_applicants = sorted(set(doc_df["applicant_id"].unique().tolist()))
+        selected_applicant = st.selectbox("Select Applicant", [""] + all_applicants, key="eligibility_applicant")
+        if st.button("🔍 Run Assessment", disabled=not selected_applicant, type="primary", use_container_width=True):
+            with st.spinner("Running AI eligibility assessment..."):
+                try:
+                    response = requests.post(
+                        "http://localhost:8000/check-eligibility",
+                        json={"applicant_id": selected_applicant},
+                        timeout=30
                     )
-                    
-                    # Show success animation if available
-                    if lottie_json:
-                        st_lottie(lottie_json, height=120, key="eligibility_success")
-                        
-                else:
-                    st.error(f"❌ Eligibility agent error: {response.status_code} - {response.text}")
-                    
-            except requests.exceptions.Timeout:
-                st.error("❌ Request timed out. The eligibility agent may be busy.")
-            except requests.exceptions.ConnectionError:
-                st.error("❌ Could not connect to eligibility agent. Please ensure it's running on localhost:8000")
-            except Exception as e:
-                st.error(f"❌ Failed to contact eligibility agent: {e}")
-    
-    elif run_assessment and not selected_applicant:
-        st.warning("Please select an applicant ID first.")
-    
-    st.markdown('</div>', unsafe_allow_html=True)
+                    if response.status_code == 200:
+                        result = response.json()
+                        st.markdown("---")
+                        st.markdown("### 📊 Assessment Results")
+                        col1_res, col2_res, col3_res = st.columns(3)
+                        with col1_res:
+                            decision = result.get('decision', 'Unknown')
+                            decision_icon = '✅' if decision.lower() == 'yes' else ('⚠️' if decision.lower() == 'needs review' else '❌')
+                            alert_class = 'alert-success' if decision.lower() == 'yes' else ('alert-warning' if decision.lower() == 'needs review' else 'alert-error')
+                            st.markdown(f'<div class="alert {alert_class}"><strong>Decision:</strong> {decision_icon} {decision}</div>', unsafe_allow_html=True)
+                        with col2_res:
+                            score = result.get('score', 0)
+                            st.metric("Confidence Score", f"{score}")
+                        summary = result.get('summary', 'No reasoning provided')
+                        st.markdown("**AI Reasoning:**")
+                        st.markdown(f'<div class="alert alert-info">{summary}</div>', unsafe_allow_html=True)
+                        # Download full report as JSON
+                        report_data = {
+                            'decision': result.get('decision'),
+                            'score': result.get('score'),
+                            'summary': result.get('summary'),
+                            'criteria': result.get('criteria'),
+                            'report_url': result.get('report_url')
+                        }
+                        st.download_button(
+                            label="📥 Download Full Report (JSON)",
+                            data=json.dumps(report_data, indent=2),
+                            file_name=f"{selected_applicant}_eligibility_report.json",
+                            mime="application/json"
+                        )
+                        if lottie_json:
+                            st_lottie(lottie_json, height=120, key="eligibility_success")
+                    else:
+                        st.error(f"❌ Eligibility agent error: {response.status_code} - {response.text}")
+                except requests.exceptions.Timeout:
+                    st.error("❌ Request timed out. The eligibility agent may be busy.")
+                except requests.exceptions.ConnectionError:
+                    st.error("❌ Could not connect to eligibility agent. Please ensure it's running on localhost:8000")
+                except Exception as e:
+                    st.error(f"❌ Failed to contact eligibility agent: {e}")
+
+    with st.expander("🛡️ Document Verification"):
+        st.markdown("<p>Analyze all documents for an applicant for authenticity, content, compliance, and potential risks. Issues will be highlighted in the breakdown.</p>", unsafe_allow_html=True)
+        all_applicants = sorted(set(doc_df["applicant_id"].unique().tolist()))
+        selected_verif_applicant = st.selectbox("Select Applicant for Verification", [""] + all_applicants, key="verification_applicant")
+        verif_query = st.text_area("Verification query (optional):", key="verification_query_applicant")
+        if st.button("🔍 Run Applicant Analysis", disabled=not selected_verif_applicant, type="primary", use_container_width=True):
+            with st.spinner("Running applicant document analysis..."):
+                try:
+                    response = requests.post(
+                        "http://localhost:8000/analyze-applicant",
+                        json={"applicant_id": selected_verif_applicant, "query": verif_query},
+                        timeout=30
+                    )
+                    if response.status_code == 200:
+                        result = response.json()
+                        st.markdown("---")
+                        st.markdown("### 🛡️ Applicant Document Verification Results")
+                        st.markdown(f'<div class="alert alert-info" style="white-space: pre-line;">{result.get('summary', 'No summary provided')}</div>', unsafe_allow_html=True)
+                        # Show breakdown as a table
+                        breakdown = result.get('breakdown', [])
+                        if breakdown:
+                            st.markdown("**Breakdown:**")
+                            for b in breakdown:
+                                doc_line = f"{b['icon']} <b>{b['document']}</b>: {b['status'].capitalize()}"
+                                if b['issues']:
+                                    doc_line += f" <span style='color: #a80000;'>Issues: {', '.join(b['issues'])}</span>"
+                                st.markdown(doc_line, unsafe_allow_html=True)
+                                st.caption(b.get('summary', ''))
+                        # Download full report as JSON
+                        st.download_button(
+                            label="📥 Download Full Verification Report (JSON)",
+                            data=json.dumps(result, indent=2),
+                            file_name=f"{selected_verif_applicant}_verification_report.json",
+                            mime="application/json"
+                        )
+                    else:
+                        st.error(f"❌ Verification agent error: {response.status_code} - {response.text}")
+                except requests.exceptions.Timeout:
+                    st.error("❌ Request timed out. The verification agent may be busy.")
+                except requests.exceptions.ConnectionError:
+                    st.error("❌ Could not connect to verification agent. Please ensure it's running on localhost:8000")
+                except Exception as e:
+                    st.error(f"❌ Failed to contact verification agent: {e}")
+
+    with st.expander("⚖️ Compliance Agent"):
+        st.markdown("<p>Checks documents against regulatory standards and internal policies based on your query.</p>", unsafe_allow_html=True)
+        compliance_query = st.text_area("Compliance query:", key="compliance_query")
+        if st.button("🔍 Run Compliance Check", disabled=not compliance_query, type="primary", use_container_width=True):
+            with st.spinner("Running compliance check..."):
+                try:
+                    result = "Compliance check functionality is under development."
+                    st.markdown("---")
+                    st.markdown("### ⚖️ Compliance Check Results")
+                    st.markdown(f'<div class="alert alert-info">{result}</div>', unsafe_allow_html=True)
+                except Exception as e:
+                    st.error(f"❌ Compliance agent error: {e}")
 
 # TAB 4: DOCUMENT ASSISTANT (RAG)
 elif st.session_state.active_tab == 3:

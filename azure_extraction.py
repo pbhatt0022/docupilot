@@ -16,7 +16,7 @@ MUST_HAVE_FIELDS = {
     "Passport": ["FirstName", "LastName", "DateOfBirth", "DocumentNumber", "ExpiryDate"],
     # "VoterID": ["FirstName", "LastName", "DocumentNumber", "Address"],  # commented out
     # "Driving License": ["FirstName", "LastName", "DateOfBirth", "DocumentNumber", "ExpiryDate"],  # commented out
-    "Bank Statement": ["AccountNumber", "IFSC", "BankName"],
+    "Bank Statement": ["AccountNumber", "IFSC"],
     # "Salary Slip": ["EmployeeName", "EmployerName", "NetSalary", "Month", "Year"],  # commented out
     # "Loan Application Form": ["ApplicantName", "LoanAmount", "ApplicationDate"],  # commented out
     # "Form 16": ["EmployeeName", "EmployerName", "AssessmentYear", "GrossSalary", "TaxDeducted"],  # commented out
@@ -378,6 +378,66 @@ def extract_credit_report_fields_from_document(result):
         "ReportDate": report_date
     }
 
+def perform_generalized_fallback_extraction(result, must_have, field_map, extracted):
+    """
+    Performs generalized fallback extraction for missing must-have fields using regex and line-based search.
+    Updates the extracted dictionary in-place.
+    """
+    import re
+    
+    # Get full text from document
+    full_text = ""
+    for page in getattr(result, "pages", []):
+        for line in page.lines:
+            full_text += line.content + "\n"
+    lines = [l.strip() for l in full_text.splitlines()]
+    
+    # Search for missing must-have fields
+    for must in must_have:
+        if not extracted.get(must):
+            label_variations = [k for k, v in field_map.items() if v == must]
+            found = False
+            
+            # Try regex first
+            for label in label_variations:
+                pattern = rf"{label}\s*[:\-]?\s*([A-Za-z0-9 ,./]+)"
+                match = re.search(pattern, full_text, re.IGNORECASE)
+                if match:
+                    extracted[must] = match.group(1).strip()
+                    found = True
+                    break
+            
+            # If not found, try line-based extraction
+            if not found:
+                for i, line in enumerate(lines):
+                    for label in label_variations:
+                        if label.lower() in line.lower():
+                            # Return the next non-empty line as the value
+                            for j in range(i+1, len(lines)):
+                                value = lines[j].strip()
+                                if value:
+                                    extracted[must] = value
+                                    found = True
+                                    break
+                    if found:
+                        break
+
+def check_missing_fields_and_completeness(must_have, extracted):
+    """
+    Check for missing fields and determine completeness.
+    Returns: (missing_fields, is_complete)
+    """
+    missing_fields = []
+    must_have_normalized = [normalize_field_name(f) for f in must_have]
+    extracted_keys_norm = {normalize_field_name(k) for k in extracted.keys() if extracted[k] is not None and extracted[k] != ""}
+    
+    for must in must_have:
+        if normalize_field_name(must) not in extracted_keys_norm:
+            missing_fields.append(must)
+    
+    is_complete = len(missing_fields) == 0
+    return missing_fields, is_complete
+
 def extract_fields_with_model(file_path: str, doc_type: str):
     """
     Extracts structured fields from a document using the appropriate model based on doc_type.
@@ -386,7 +446,6 @@ def extract_fields_with_model(file_path: str, doc_type: str):
     model = MODEL_MAP.get(doc_type, "prebuilt-document")
     must_have = MUST_HAVE_FIELDS.get(doc_type, [])
     field_map = FIELD_NAME_MAP.get(doc_type, {})
-    must_have_normalized = [normalize_field_name(f) for f in must_have]
 
     with open(file_path, "rb") as f:
         poller = fr_client.begin_analyze_document(model, document=f)
@@ -394,10 +453,13 @@ def extract_fields_with_model(file_path: str, doc_type: str):
 
     extracted = {}
     raw_extracted = {}
-    missing_fields = []
-    is_complete = True
 
+    print(f"Starting extraction for {file_path}, doc_type={doc_type}")
+
+    # First, extract from Azure Form Recognizer model results
     if result.documents:
+        must_have_normalized = [normalize_field_name(f) for f in must_have]
+        
         for document in result.documents:
             for name, field in document.fields.items():
                 raw_extracted[name] = to_json_serializable(field.value)
@@ -422,129 +484,46 @@ def extract_fields_with_model(file_path: str, doc_type: str):
                     canonical_name = name.replace(" ", "")
                 extracted[canonical_name] = to_json_serializable(field.value)
 
-        print(f"Starting extraction for {file_path}, doc_type={doc_type}")
         print("Raw extracted fields from Azure model:", raw_extracted)
         print("Final mapped/normalized extracted fields (before post-processing):", extracted)
-
-        # If Bank Statement, enhance extraction with heuristics
-        if doc_type == "Bank Statement":
-            bank_fields = extract_bank_fields_from_document(result)
-            for k, v in bank_fields.items():
-                if v:
-                    extracted[k] = v
-        # If Income Tax Return, enhance extraction with heuristics
-        if doc_type == "Income Tax Return":
-            itr_fields = extract_itr_fields_from_document(result)
-            for k, v in itr_fields.items():
-                if v:
-                    extracted[k] = v
-        # If Credit Report, enhance extraction with heuristics
-        if doc_type == "Credit Report":
-            cr_fields = extract_credit_report_fields_from_document(result)
-            for k, v in cr_fields.items():
-                if v:
-                    extracted[k] = v
-
-        print("Final mapped/normalized extracted fields (after post-processing):", extracted)
-
-        # Generalized fallback: regex search for missing must-have fields
-        full_text = ""
-        for page in getattr(result, "pages", []):
-            for line in page.lines:
-                full_text += line.content + "\n"
-        lines = [l.strip() for l in full_text.splitlines()]
-        for must in must_have:
-            if not extracted.get(must):
-                label_variations = [k for k, v in field_map.items() if v == must]
-                found = False
-                # Try regex first
-                for label in label_variations:
-                    import re
-                    pattern = rf"{label}\s*[:\-]?\s*([A-Za-z0-9 ,./]+)"
-                    match = re.search(pattern, full_text, re.IGNORECASE)
-                    if match:
-                        extracted[must] = match.group(1).strip()
-                        found = True
-                        break
-                # If not found, try line-based extraction
-                if not found:
-                    for i, line in enumerate(lines):
-                        for label in label_variations:
-                            if label.lower() in line.lower():
-                                # Return the next non-empty line as the value
-                                for j in range(i+1, len(lines)):
-                                    value = lines[j].strip()
-                                    if value:
-                                        extracted[must] = value
-                                        found = True
-                                        break
-                        if found:
-                            break
-
-        # Check must-have fields (using normalization)
-        extracted_keys_norm = {normalize_field_name(k) for k in extracted.keys()}
-        for must in must_have:
-            if normalize_field_name(must) not in extracted_keys_norm:
-                missing_fields.append(must)
-                is_complete = False
     else:
-        # No documents found, mark all must-have fields as missing
-        missing_fields = must_have
-        is_complete = False
-
-        # Always run post-processing for these types
-        if doc_type == "Bank Statement":
-            bank_fields = extract_bank_fields_from_document(result)
-            for k, v in bank_fields.items():
-                if v:
-                    extracted[k] = v
-        if doc_type == "Income Tax Return":
-            itr_fields = extract_itr_fields_from_document(result)
-            for k, v in itr_fields.items():
-                if v:
-                    extracted[k] = v
-        if doc_type == "Credit Report":
-            cr_fields = extract_credit_report_fields_from_document(result)
-            for k, v in cr_fields.items():
-                if v:
-                    extracted[k] = v
-
-        # Optionally, store the full raw text for debugging
+        # No documents found, store the full raw text for debugging
         full_text = ""
         for page in getattr(result, "pages", []):
             for line in page.lines:
                 full_text += line.content + "\n"
         if full_text:
             raw_extracted["full_text"] = full_text
-        lines = [l.strip() for l in full_text.splitlines()]
-        # Generalized fallback: regex search for missing must-have fields
-        for must in must_have:
-            if not extracted.get(must):
-                label_variations = [k for k, v in field_map.items() if v == must]
-                found = False
-                for label in label_variations:
-                    import re
-                    pattern = rf"{label}\s*[:\-]?\s*([A-Za-z0-9 ,./]+)"
-                    match = re.search(pattern, full_text, re.IGNORECASE)
-                    if match:
-                        extracted[must] = match.group(1).strip()
-                        found = True
-                        break
-                if not found:
-                    for i, line in enumerate(lines):
-                        for label in label_variations:
-                            if label.lower() in line.lower():
-                                for j in range(i+1, len(lines)):
-                                    value = lines[j].strip()
-                                    if value:
-                                        extracted[must] = value
-                                        found = True
-                                        break
-                        if found:
-                            break
 
+    # Post-processing: Run document-specific heuristic extraction
+    if doc_type == "Bank Statement":
+        bank_fields = extract_bank_fields_from_document(result)
+        for k, v in bank_fields.items():
+            if v:
+                extracted[k] = v
+    elif doc_type == "Income Tax Return":
+        itr_fields = extract_itr_fields_from_document(result)
+        for k, v in itr_fields.items():
+            if v:
+                extracted[k] = v
+    elif doc_type == "Credit Report":
+        cr_fields = extract_credit_report_fields_from_document(result)
+        for k, v in cr_fields.items():
+            if v:
+                extracted[k] = v
+
+    # Generalized fallback: regex search for missing must-have fields
+    perform_generalized_fallback_extraction(result, must_have, field_map, extracted)
+
+    print("Final mapped/normalized extracted fields (after post-processing):", extracted)
+
+    # NOW check for missing fields after all extraction attempts are complete
+    missing_fields, is_complete = check_missing_fields_and_completeness(must_have, extracted)
+
+    # Determine flagging status
     flagged_by_ai = False
     flagged_reason = ""
+    
     if missing_fields:
         flagged_by_ai = True
         flagged_reason = f"Missing required fields: {', '.join(missing_fields)}"
@@ -554,11 +533,12 @@ def extract_fields_with_model(file_path: str, doc_type: str):
     elif doc_type == "Others":
         flagged_by_ai = True
         flagged_reason = "Document type is unrecognized. Please review manually."
-    elif flagged_by_ai:
-        flagged_reason = "Flagged by AI for further review. Please check the document."
     else:
         flagged_by_ai = False
         flagged_reason = "All required fields are present. No issues detected by AI."
+
+    # Collect all raw fields for debugging or downstream use
+    raw_extracted = dict(extracted)  # or customize as needed
 
     return extracted, is_complete, missing_fields, flagged_by_ai, flagged_reason, raw_extracted 
 
@@ -580,4 +560,4 @@ def extract_field_from_lines(label_variations, lines):
                     value = lines[j].strip()
                     if is_probable_name(value):
                         return value
-    return None 
+    return None

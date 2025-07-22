@@ -40,6 +40,8 @@ async def run_eligibility_pipeline(applicant_id: str):
     return {
         "decision": result["decision"],
         "score": result["confidence_score"],
+        "summary": generate_summary(result),
+        "criteria": result["criteria"],
         "report_url": blob_url
     }
 
@@ -47,6 +49,31 @@ async def run_eligibility_pipeline(applicant_id: str):
 def generate_summary(result):
     decision = result["decision"]
     cs = result["confidence_score"]
-    phrases = [c["comments"] for c in result["criteria"]]
-    summary = ". ".join(phrases) + "."
-    return f"{decision} candidate (score {cs}/10). {summary}"
+    criteria = result["criteria"]
+
+    pretty_names = {
+        "Income Stability": "Income Stability",
+        "Credit History": "Credit History",
+        "EMI-to-Income Ratio": "EMI-to-Income Ratio",
+        "Banking Hygiene": "Banking Hygiene",
+        "Tax Filing Consistency": "Tax Filing Consistency"
+    }
+
+    lines = [
+        f"Eligibility Assessment: {decision.upper()}",
+        f"- Total Score: {cs}/10",
+        "",
+        "Breakdown:"
+    ]
+    for c in criteria:
+        name = pretty_names.get(c["name"], c["name"])
+        lines.append(f"• {name}: {c['comments']}")
+    lines.append("")
+    if decision.lower() == "yes":
+        lines.append("Overall, the applicant meets all key criteria for eligibility.")
+    elif decision.lower() == "needs review":
+        lines.append("The applicant meets some, but not all, key criteria. Further review is recommended.")
+    else:
+        lines.append("The applicant does not meet the minimum eligibility criteria.")
+
+    return "\n".join(lines)
