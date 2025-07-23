@@ -154,3 +154,47 @@ def mark_submission_email_sent(applicant_id: str):
         print(f"[ERROR] Failed to update document for applicant_id: {applicant_id}: {e}")
         return False
     
+def get_full_applicant_data(applicant_id: str):
+    """
+    Fetch all available data for an applicant from Cosmos DB and merge into a single dictionary.
+    Returns:
+        dict: Merged applicant data (name, contact, income, credit score, docs, etc.)
+    """
+    query = "SELECT * FROM c WHERE c.applicant_id = @applicant_id"
+    params = [{"name": "@applicant_id", "value": applicant_id}]
+    items = list(container.query_items(query=query, parameters=params, enable_cross_partition_query=True))
+
+    applicant_data = {"applicant_id": applicant_id, "documents": []}
+    for doc in items:
+        # Merge top-level fields
+        for key, value in doc.items():
+            if key in ["id", "_rid", "_self", "_etag", "_attachments", "_ts", "applicant_id"]:
+                continue
+            if key == "loan_application":
+                # Merge loan_application fields
+                la = value
+                if isinstance(la, dict):
+                    for k, v in la.items():
+                        if k == "fields" and isinstance(v, dict):
+                            applicant_data.update(v)
+                        else:
+                            applicant_data[k] = v
+                continue
+            if key == "fields" and isinstance(value, dict):
+                applicant_data.update(value)
+                continue
+            if key == "report" and isinstance(value, dict):
+                applicant_data.update(value)
+                continue
+            if key == "predicted_classification":
+                # This is a document type
+                doc_info = {"type": value}
+                if "fields" in doc and isinstance(doc["fields"], dict):
+                    doc_info.update(doc["fields"])
+                applicant_data["documents"].append(doc_info)
+                continue
+            # Add any other fields
+            if key not in applicant_data:
+                applicant_data[key] = value
+    return applicant_data
+    

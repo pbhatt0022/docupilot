@@ -62,6 +62,8 @@ class ComplianceResponse(BaseModel):
     is_compliant: bool
     timestamp: datetime = Field(default_factory=datetime.now)
 
+    model_config = {"arbitrary_types_allowed": True}
+
 @app.post("/check-compliance")
 async def check_compliance(request: ComplianceRequest):
     """
@@ -203,7 +205,7 @@ async def get_compliance_requirements():
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(
-        "main:app",
+        "agents.compliance_agent.main:app",
         host="0.0.0.0",
         port=8002,
         reload=True

@@ -2,7 +2,7 @@ from typing import Dict, List
 from datetime import datetime
 from .rules.rules_engine import ComplianceRulesEngine
 from .rules.rule_definitions import RuleCategory
-from agents.data.cosmos_utils import store_compliance_result
+# from agents.data.cosmos_utils import store_compliance_result
 from agents.tools.mcp_client import callMCPTool
 
 async def run_compliance_pipeline(
@@ -127,6 +127,6 @@ async def run_compliance_pipeline(
     }
     
     # Store comprehensive result in Cosmos DB
-    await store_compliance_result(applicant_id, result)
+    # await store_compliance_result(applicant_id, result)
     
     return result
