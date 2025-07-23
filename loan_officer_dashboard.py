@@ -366,7 +366,7 @@ if "active_tab" not in st.session_state:
     st.session_state.active_tab = 0
 
 # Clean tab navigation
-tab_names = ["📊 Overview", "📋 Application Review", "🤖 AI Tools", "💬 Document Assistant", "📋 Audit Trail"]
+tab_names = ["📊 Overview", "📋 Application Review", "🤖 AI Tools", "💬 IntelliQuery", "📋 Audit Trail"]
 
 # Add application status fetching
 @st.cache_data(ttl=30)
@@ -772,6 +772,50 @@ elif st.session_state.active_tab == 1:
 elif st.session_state.active_tab == 2:
     st.markdown('<div class="section-header">AI Tools</div>', unsafe_allow_html=True)
 
+    with st.expander("🛡️ Document Verification"):
+        st.markdown("<p>Analyze all documents for an applicant for authenticity, content, compliance, and potential risks. Issues will be highlighted in the breakdown.</p>", unsafe_allow_html=True)
+        all_applicants = sorted(set(doc_df["applicant_id"].unique().tolist()))
+        selected_verif_applicant = st.selectbox("Select Applicant for Verification", [""] + all_applicants, key="verification_applicant")
+        verif_query = st.text_area("Verification query (optional):", key="verification_query_applicant")
+        if st.button("🔍 Run Applicant Analysis", disabled=not selected_verif_applicant, type="primary", use_container_width=True):
+            with st.spinner("Running applicant document analysis..."):
+                try:
+                    response = requests.post(
+                        "http://localhost:8000/analyze-applicant",
+                        json={"applicant_id": selected_verif_applicant, "query": verif_query},
+                        timeout=30
+                    )
+                    if response.status_code == 200:
+                        result = response.json()
+                        st.markdown("---")
+                        st.markdown("### 🛡️ Applicant Document Verification Results")
+                        st.markdown(f'<div class="alert alert-info" style="white-space: pre-line;">{result.get('summary', 'No summary provided')}</div>', unsafe_allow_html=True)
+                        # Show breakdown as a table
+                        breakdown = result.get('breakdown', [])
+                        if breakdown:
+                            st.markdown("**Breakdown:**")
+                            for b in breakdown:
+                                doc_line = f"{b['icon']} <b>{b['document']}</b>: {b['status'].capitalize()}"
+                                if b['issues']:
+                                    doc_line += f" <span style='color: #a80000;'>Issues: {', '.join(b['issues'])}</span>"
+                                st.markdown(doc_line, unsafe_allow_html=True)
+                                st.caption(b.get('summary', ''))
+                        # Download full report as JSON
+                        st.download_button(
+                            label="📥 Download Full Verification Report (JSON)",
+                            data=json.dumps(result, indent=2),
+                            file_name=f"{selected_verif_applicant}_verification_report.json",
+                            mime="application/json"
+                        )
+                    else:
+                        st.error(f"❌ Verification agent error: {response.status_code} - {response.text}")
+                except requests.exceptions.Timeout:
+                    st.error("❌ Request timed out. The verification agent may be busy.")
+                except requests.exceptions.ConnectionError:
+                    st.error("❌ Could not connect to verification agent. Please ensure it's running on localhost:8000")
+                except Exception as e:
+                    st.error(f"❌ Failed to contact verification agent: {e}")
+
     with st.expander("📊 Eligibility Assessment"):
         st.markdown("<p>Analyzes an applicant's documents to provide a comprehensive eligibility assessment and confidence score.</p>", unsafe_allow_html=True)
         all_applicants = sorted(set(doc_df["applicant_id"].unique().tolist()))
@@ -825,50 +869,6 @@ elif st.session_state.active_tab == 2:
                 except Exception as e:
                     st.error(f"❌ Failed to contact eligibility agent: {e}")
 
-    with st.expander("🛡️ Document Verification"):
-        st.markdown("<p>Analyze all documents for an applicant for authenticity, content, compliance, and potential risks. Issues will be highlighted in the breakdown.</p>", unsafe_allow_html=True)
-        all_applicants = sorted(set(doc_df["applicant_id"].unique().tolist()))
-        selected_verif_applicant = st.selectbox("Select Applicant for Verification", [""] + all_applicants, key="verification_applicant")
-        verif_query = st.text_area("Verification query (optional):", key="verification_query_applicant")
-        if st.button("🔍 Run Applicant Analysis", disabled=not selected_verif_applicant, type="primary", use_container_width=True):
-            with st.spinner("Running applicant document analysis..."):
-                try:
-                    response = requests.post(
-                        "http://localhost:8000/analyze-applicant",
-                        json={"applicant_id": selected_verif_applicant, "query": verif_query},
-                        timeout=30
-                    )
-                    if response.status_code == 200:
-                        result = response.json()
-                        st.markdown("---")
-                        st.markdown("### 🛡️ Applicant Document Verification Results")
-                        st.markdown(f'<div class="alert alert-info" style="white-space: pre-line;">{result.get('summary', 'No summary provided')}</div>', unsafe_allow_html=True)
-                        # Show breakdown as a table
-                        breakdown = result.get('breakdown', [])
-                        if breakdown:
-                            st.markdown("**Breakdown:**")
-                            for b in breakdown:
-                                doc_line = f"{b['icon']} <b>{b['document']}</b>: {b['status'].capitalize()}"
-                                if b['issues']:
-                                    doc_line += f" <span style='color: #a80000;'>Issues: {', '.join(b['issues'])}</span>"
-                                st.markdown(doc_line, unsafe_allow_html=True)
-                                st.caption(b.get('summary', ''))
-                        # Download full report as JSON
-                        st.download_button(
-                            label="📥 Download Full Verification Report (JSON)",
-                            data=json.dumps(result, indent=2),
-                            file_name=f"{selected_verif_applicant}_verification_report.json",
-                            mime="application/json"
-                        )
-                    else:
-                        st.error(f"❌ Verification agent error: {response.status_code} - {response.text}")
-                except requests.exceptions.Timeout:
-                    st.error("❌ Request timed out. The verification agent may be busy.")
-                except requests.exceptions.ConnectionError:
-                    st.error("❌ Could not connect to verification agent. Please ensure it's running on localhost:8000")
-                except Exception as e:
-                    st.error(f"❌ Failed to contact verification agent: {e}")
-
     with st.expander("⚖️ Compliance Agent"):
         st.markdown("<p>Checks documents against regulatory standards and internal policies based on your query.</p>", unsafe_allow_html=True)
         compliance_query = st.text_area("Compliance query:", key="compliance_query")
@@ -898,9 +898,9 @@ elif st.session_state.active_tab == 2:
 
 # TAB 4: DOCUMENT ASSISTANT (RAG)
 elif st.session_state.active_tab == 3:
-    st.markdown('<div class="section-header">Document Assistant</div>', unsafe_allow_html=True)
-    st.markdown('<div class="card-container">', unsafe_allow_html=True)
-    st.markdown("Ask questions about the loan documents and get AI-powered answers.")
+    st.markdown('<div class="section-header">IntelliQuery</div>', unsafe_allow_html=True)
+    # st.markdown('<div class="card-container">', unsafe_allow_html=True)
+    st.markdown("Ask questions about Applicants, Documents and Best Practices")
     
     # Only show chat container if there are messages
     if st.session_state.messages:
@@ -948,7 +948,7 @@ elif st.session_state.active_tab == 4:
     st.markdown('<div class="section-header">Audit Trail & Compliance</div>', unsafe_allow_html=True)
     
     # Audit trail filters
-    st.markdown('<div class="card-container">', unsafe_allow_html=True)
+    # st.markdown('<div class="card-container">', unsafe_allow_html=True)
     
     col1, col2, col3 = st.columns(3)
     
@@ -1063,7 +1063,7 @@ elif st.session_state.active_tab == 4:
     # Compliance queries
     st.markdown('<div class="section-header">Compliance Queries</div>', unsafe_allow_html=True)
     
-    st.markdown('<div class="card-container">', unsafe_allow_html=True)
+    # st.markdown('<div class="card-container">', unsafe_allow_html=True)
     st.markdown("**Common Compliance Questions:**")
     
     compliance_queries = [

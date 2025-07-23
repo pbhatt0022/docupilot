@@ -42,7 +42,7 @@ def get_embedding(prompt: str):
     return response.data[0].embedding
 
 
-def search_vector_top_k(embedding, k=5):
+def search_vector_top_k(embedding, k=7):
     url = f"{SEARCH_ENDPOINT}/indexes/{INDEX_NAME}/docs/search?api-version=2023-10-01-Preview"
 
     headers = {
