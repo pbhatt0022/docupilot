@@ -11,7 +11,7 @@ class ComplianceRulesEngine:
 
     async def validate_kyc_documents(self, documents: Dict) -> List[Dict]:
         violations = []
-        required_docs = {"aadhaar", "pan"}
+        required_docs = {"Passport", "PAN Card"}
 
         # Check for required documents
         missing_docs = required_docs - set(documents.keys())
@@ -71,7 +71,7 @@ class ComplianceRulesEngine:
         violations = []
 
         # Check for required income documents
-        income_docs = {"salary_slip", "form16", "bank_statements"}
+        income_docs = {"Bank Statement", "Income Tax Return", "Salary Slip", "Form 16"}
         provided_income_docs = [doc for doc in documents.keys() if doc in income_docs]
 
         if not provided_income_docs:
@@ -81,19 +81,8 @@ class ComplianceRulesEngine:
                 "severity": "HIGH",
                 "message": "No valid income proof document provided"
             })
-
-        # For demo, simulate document validation
-        for doc_type in provided_income_docs:
-            # Simulate a 15% chance of invalid income document
-            import random
-            if random.random() < 0.15:
-                violations.append({
-                    "rule_id": "INC001",
-                    "rule_category": RuleCategory.INCOME.value,
-                    "severity": "HIGH",
-                    "message": f"Invalid {doc_type}: Document appears to be tampered or illegible"
-                })
-
+        # In production, add real validation here
+        # (Random invalidation removed for testing)
         return violations
 
     async def check_rbi_compliance(self, application_data: Dict) -> List[Dict]:

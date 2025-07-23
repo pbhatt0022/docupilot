@@ -31,7 +31,7 @@ INTERNAL_RULES = [
         rule_id="KYC001",
         category=RuleCategory.KYC,
         title="Mandatory KYC Verification",
-        content="Every loan application must include valid KYC documents such as Aadhaar, PAN, Passport, or Voter ID. Documents must be verified using Form Recognizer or internal verification agents."
+        content="Every loan application must include valid KYC documents such as Passport, PAN Card, Voter ID. Documents must be verified using Form Recognizer or internal verification agents."
     ),
     ComplianceRule(
         rule_id="ID001",
@@ -49,19 +49,19 @@ INTERNAL_RULES = [
         rule_id="SIG001",
         category=RuleCategory.SIGNATURE,
         title="Signature Matching",
-        content="Applicant's signature must match across the loan application form and supporting documents such as Aadhaar or PAN. Use digital signature comparison tools when available."
+        content="Applicant's signature must match across the loan application form and supporting documents such as Passport or PAN. Use digital signature comparison tools when available."
     ),
     ComplianceRule(
         rule_id="AGE001",
         category=RuleCategory.AGE,
         title="Minimum and Maximum Age",
-        content="Applicants must be between 21 and 58 years old at the time of application. DOB should be parsed from Aadhaar, PAN, or Passport and validated against this range."
+        content="Applicants must be between 21 and 58 years old at the time of application. DOB should be parsed from Passport, PAN, or Voter ID and validated against this range."
     ),
     ComplianceRule(
         rule_id="INC001",
         category=RuleCategory.INCOME,
         title="Income Proof Requirement",
-        content="At least one valid income document must be submitted (Salary Slip, Bank Statement, Form 16). Each must include employer name, salary/net income, and recent date (within 3 months)."
+        content="At least one valid income document must be submitted (Salary Slip, Bank Statement, Income Tax Return, Form 16). Each must include employer name, salary/net income, and recent date (within 3 months)."
     ),
     ComplianceRule(
         rule_id="APP001",

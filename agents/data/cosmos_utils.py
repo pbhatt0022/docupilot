@@ -155,46 +155,55 @@ def mark_submission_email_sent(applicant_id: str):
         return False
     
 def get_full_applicant_data(applicant_id: str):
-    """
-    Fetch all available data for an applicant from Cosmos DB and merge into a single dictionary.
-    Returns:
-        dict: Merged applicant data (name, contact, income, credit score, docs, etc.)
-    """
     query = "SELECT * FROM c WHERE c.applicant_id = @applicant_id"
     params = [{"name": "@applicant_id", "value": applicant_id}]
     items = list(container.query_items(query=query, parameters=params, enable_cross_partition_query=True))
 
-    applicant_data = {"applicant_id": applicant_id, "documents": []}
+    applicant_data = {
+        "applicant_id": applicant_id,
+        "name": None,
+        "email": None,
+        "phone": None,
+        "dob": None,
+        "loan_amount": None,
+        "tenure_months": None,
+        "loan_purpose": None,
+        "emi": None,
+        "interest_rate": None,
+        "credit_score": None,
+        "income": None,
+        "documents": []
+    }
+
     for doc in items:
-        # Merge top-level fields
-        for key, value in doc.items():
-            if key in ["id", "_rid", "_self", "_etag", "_attachments", "_ts", "applicant_id"]:
-                continue
-            if key == "loan_application":
-                # Merge loan_application fields
-                la = value
-                if isinstance(la, dict):
-                    for k, v in la.items():
-                        if k == "fields" and isinstance(v, dict):
-                            applicant_data.update(v)
-                        else:
-                            applicant_data[k] = v
-                continue
-            if key == "fields" and isinstance(value, dict):
-                applicant_data.update(value)
-                continue
-            if key == "report" and isinstance(value, dict):
-                applicant_data.update(value)
-                continue
-            if key == "predicted_classification":
-                # This is a document type
-                doc_info = {"type": value}
-                if "fields" in doc and isinstance(doc["fields"], dict):
-                    doc_info.update(doc["fields"])
-                applicant_data["documents"].append(doc_info)
-                continue
-            # Add any other fields
-            if key not in applicant_data:
-                applicant_data[key] = value
-    return applicant_data
+        # Loan application doc
+        if doc.get("id", "").endswith("_loan_app"):
+            loan_app = doc.get("loan_application", {})
+            fields = loan_app.get("fields", {})
+            applicant_data["name"] = fields.get("ApplicantName") or fields.get("FirstName")
+            applicant_data["email"] = loan_app.get("email")
+            applicant_data["phone"] = fields.get("Phone")
+            applicant_data["dob"] = fields.get("DateOfBirth")
+            applicant_data["loan_amount"] = loan_app.get("loan_amount")
+            applicant_data["tenure_months"] = loan_app.get("tenure_months")
+            applicant_data["loan_purpose"] = loan_app.get("loan_purpose")
+            applicant_data["emi"] = loan_app.get("emi")
+            applicant_data["interest_rate"] = loan_app.get("interest_rate")
+            applicant_data["credit_score"] = fields.get("CreditScore")
+            applicant_data["income"] = fields.get("GrossIncome")
+        # Document record
+        elif doc.get("predicted_classification"):
+            doc_info = {
+                "type": doc.get("predicted_classification"),
+                "blob_url": doc.get("blob_url"),
+                "file_name": doc.get("file_name"),
+                "status": doc.get("status"),
+                "extracted_fields": doc.get("extracted_fields", {}),
+                "is_complete": doc.get("is_complete", False),
+                "missing_fields": doc.get("missing_fields", []),
+                "flagged_by_ai": doc.get("flagged_by_ai", False),
+                "flagged_reason": doc.get("flagged_reason", ""),
+            }
+            applicant_data["documents"].append(doc_info)
+    return applicant_data if items else None
     

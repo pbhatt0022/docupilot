@@ -4,9 +4,9 @@ from typing import List, Optional, Dict
 from datetime import datetime
 from azure.ai.projects import AIProjectClient
 from azure.identity import DefaultAzureCredential
-from azure.ai.agents.models import ListSortOrder
 from .executor import run_compliance_pipeline
 from .rules.rule_definitions import RuleCategory
+from agents.data.cosmos_utils import get_full_applicant_data
 
 app = FastAPI(title="Loan Compliance Agent")
 
@@ -18,10 +18,7 @@ class Document(BaseModel):
 
 class ComplianceRequest(BaseModel):
     applicant_id: str
-    loan_type: str
-    loan_amount: float
-    documents: Dict[str, Document]  # Structured document information
-    additional_info: Optional[dict] = None  # Any additional application info
+    # All other fields will be fetched from Cosmos DB
 
 class ViolationDetail(BaseModel):
     rule_id: str
@@ -70,14 +67,32 @@ async def check_compliance(request: ComplianceRequest):
     Check loan application compliance with regulatory requirements
     """
     try:
+        applicant_data = get_full_applicant_data(request.applicant_id)
+        if not applicant_data:
+            raise HTTPException(status_code=404, detail=f"Applicant {request.applicant_id} not found in database.")
+
+        documents = {doc["type"]: doc for doc in applicant_data.get("documents", []) if "type" in doc}
+
         result = await run_compliance_pipeline(
             applicant_id=request.applicant_id,
-            loan_type=request.loan_type,
-            loan_amount=request.loan_amount,
-            documents=request.documents
+            loan_type=applicant_data.get("loan_purpose"),
+            loan_amount=applicant_data.get("loan_amount"),
+            documents=documents,
+            credit_score=applicant_data.get("credit_score"),
+            income=applicant_data.get("income"),
+            dob=applicant_data.get("dob"),
+            tenure_months=applicant_data.get("tenure_months"),
+            emi=applicant_data.get("emi"),
+            interest_rate=applicant_data.get("interest_rate"),
+            name=applicant_data.get("name"),
+            email=applicant_data.get("email"),
+            phone=applicant_data.get("phone")
         )
         return result
+    except HTTPException:
+        raise
     except Exception as e:
+        print("Exception in /check-compliance endpoint:", e)
         raise HTTPException(status_code=500, detail=f"Error processing compliance check: {str(e)}")
 
 @app.get("/compliance-requirements")
@@ -207,6 +222,6 @@ if __name__ == "__main__":
     uvicorn.run(
         "agents.compliance_agent.main:app",
         host="0.0.0.0",
-        port=8002,
+        port=8004,
         reload=True
     )

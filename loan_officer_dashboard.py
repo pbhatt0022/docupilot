@@ -781,7 +781,7 @@ elif st.session_state.active_tab == 2:
             with st.spinner("Running applicant document analysis..."):
                 try:
                     response = requests.post(
-                        "http://localhost:8000/analyze-applicant",
+                        "http://localhost:8003/analyze-applicant",
                         json={"applicant_id": selected_verif_applicant, "query": verif_query},
                         timeout=30
                     )
@@ -789,7 +789,7 @@ elif st.session_state.active_tab == 2:
                         result = response.json()
                         st.markdown("---")
                         st.markdown("### 🛡️ Applicant Document Verification Results")
-                        st.markdown(f'<div class="alert alert-info" style="white-space: pre-line;">{result.get('summary', 'No summary provided')}</div>', unsafe_allow_html=True)
+                        st.markdown(f'<div class="alert alert-info" style="white-space: pre-line;">{result.get("summary", "No summary provided")}</div>', unsafe_allow_html=True)
                         # Show breakdown as a table
                         breakdown = result.get('breakdown', [])
                         if breakdown:
@@ -878,11 +878,11 @@ elif st.session_state.active_tab == 2:
         if st.button("🔍 Run Compliance Check", disabled=not compliance_query or not selected_applicant, type="primary", use_container_width=True):
             with st.spinner("Running compliance check..."):
                 try:
+                    print("Selected applicant for compliance:", selected_applicant)
                     response = requests.post(
-                        "http://localhost:8003/compliance-check",  # Update this if your endpoint is different
+                        "http://localhost:8004/check-compliance",
                         json={
                             "applicant_id": selected_applicant,
-                            "query": compliance_query
                         },
                         timeout=30
                     )
@@ -890,7 +890,84 @@ elif st.session_state.active_tab == 2:
                         result = response.json()
                         st.markdown("---")
                         st.markdown("### ⚖️ Compliance Check Results")
-                        st.json(result)
+
+                        # 1. Compliance Status
+                        compliance_status = result.get("compliance_status", "Unknown")
+                        status_icon = "✅" if compliance_status == "COMPLIANT" else "❌"
+                        alert_class = "alert-success" if compliance_status == "COMPLIANT" else "alert-error"
+                        st.markdown(
+                            f'<div class="alert {alert_class}"><strong>Status:</strong> {status_icon} {compliance_status.replace("_", " ").title()}</div>',
+                            unsafe_allow_html=True
+                        )
+
+                        # 2. Application Summary
+                        summary = result.get("application_summary", {})
+                        st.markdown("**Application Summary:**")
+                        col1, col2, col3 = st.columns(3)
+                        with col1:
+                            st.metric("Applicant ID", summary.get("applicant_id", "N/A"))
+                            st.metric("Loan Type", summary.get("loan_type", "N/A"))
+                        with col2:
+                            st.metric("Loan Amount", summary.get("loan_amount", "N/A"))
+                            st.metric("Credit Score", summary.get("credit_score", "N/A"))
+                        with col3:
+                            st.metric("Monthly Income", summary.get("monthly_income", "N/A"))
+                            st.metric("Risk Score", summary.get("risk_score", "N/A"))
+
+                        # 3. Violations
+                        violations = result.get("violations", {})
+                        st.markdown("**Violations:**")
+                        for category, vlist in violations.items():
+                            if vlist:
+                                st.markdown(f"**{category.replace('_', ' ').title()}**")
+                                for v in vlist:
+                                    st.markdown(
+                                        f'<div class="alert alert-error"><strong>{v.get("rule_id", "")}:</strong> {v.get("message", "")} <br>'
+                                        f'<em>Severity:</em> {v.get("severity", "")} | <em>Category:</em> {v.get("rule_category", "")}</div>',
+                                        unsafe_allow_html=True
+                                    )
+
+                        # 4. Missing Documents
+                        missing_docs = result.get("missing_documents", [])
+                        if missing_docs:
+                            st.markdown("**Missing Documents:**")
+                            for doc in missing_docs:
+                                st.markdown(f'<div class="alert alert-warning">{doc}</div>', unsafe_allow_html=True)
+
+                        # 5. Risk Assessment
+                        risk = result.get("risk_assessment", {})
+                        st.markdown("**Risk Assessment:**")
+                        st.markdown(f'<div class="alert alert-info"><strong>Risk Level:</strong> {risk.get("risk_level", "N/A")}</div>', unsafe_allow_html=True)
+                        if risk.get("risk_flags"):
+                            for flag in risk["risk_flags"]:
+                                st.markdown(
+                                    f'<div class="alert alert-error"><strong>{flag.get("type", "")}:</strong> {flag.get("message", "")} <br>'
+                                    f'<em>Severity:</em> {flag.get("severity", "")} | <em>Category:</em> {flag.get("category", "")}</div>',
+                                    unsafe_allow_html=True
+                                )
+
+                        # 6. Compliance Summary
+                        comp_sum = result.get("compliance_summary", {})
+                        st.markdown("**Compliance Summary:**")
+                        st.markdown(
+                            f'<div class="alert alert-info">'
+                            f'KYC: {comp_sum.get("kyc_status", "N/A")} | '
+                            f'Credit: {comp_sum.get("credit_status", "N/A")} | '
+                            f'Fraud: {comp_sum.get("fraud_check_status", "N/A")} | '
+                            f'Document: {comp_sum.get("document_status", "N/A")}'
+                            f'</div>',
+                            unsafe_allow_html=True
+                        )
+
+                        # 7. Recommendations
+                        recs = result.get("recommendations", [])
+                        if recs:
+                            st.markdown("**Recommendations:**")
+                            for rec in recs:
+                                st.markdown(f'<div class="alert alert-info">{rec}</div>', unsafe_allow_html=True)
+
+                        # 8. Timestamp
+                        st.caption(f"Report generated at: {result.get('timestamp', '')}")
                     else:
                         st.error(f"❌ Compliance agent error: {response.status_code} - {response.text}")
                 except Exception as e:

@@ -6,13 +6,17 @@ from azure.ai.projects.models import AzureAISearchTool, Tool
 from azure.ai.agents.models import MessageRole, ListSortOrder
 
 # Load environment variables
+import os
+from dotenv import load_dotenv
 
+# Load env variables
+load_dotenv()
 # Azure AI Project config
-ENDPOINT = "https://dikshap04-2930-resource.services.ai.azure.com"
-RESOURCE_GROUP = "rg-dikshap04-8287_ai"
-SUBSCRIPTION_ID = "42c8e906-d297-4aa8-8e25-0c092ca65899"
-PROJECT_NAME = "dikshap04-7574"
-INDEX_NAME = "rag-1752732624194"
+ENDPOINT = os.getenv("PROJECT_ENDPOINT")
+RESOURCE_GROUP = os.getenv("RESOURCE_GROUP")
+SUBSCRIPTION_ID = os.getenv("SUBSCRIPTION_ID")
+PROJECT_NAME = os.getenv("PROJECT_NAME")
+INDEX_NAME = os.getenv("INDEX_NAME")
 
 # Step 2: Connect to Azure AI Project
 def create_ai_client():

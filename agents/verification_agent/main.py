@@ -6,11 +6,11 @@ from dotenv import load_dotenv
 from azure.core.credentials import AzureKeyCredential
 from azure.search.documents import SearchClient
 
-load_dotenv()
+
 
 AZURE_SEARCH_ENDPOINT = os.getenv("SEARCH_ENDPOINT")
 AZURE_SEARCH_KEY = os.getenv("SEARCH_API_KEY")
-AZURE_SEARCH_INDEX = os.getenv("SEARCH_INDEX", "rag-2")
+AZURE_SEARCH_INDEX = "rag-2"
 
 app = FastAPI()
 

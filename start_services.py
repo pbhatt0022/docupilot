@@ -78,7 +78,7 @@ def main():
     # Start Compliance Agent
     compliance_process = start_service(
         "Compliance Agent",
-        "python -m uvicorn agents.compliance_agent.main:app --host 0.0.0.0 --port 8003 --reload"
+        "uvicorn agents.compliance_agent.main:app --host 0.0.0.0 --port 8004 --reload"
     )
     if compliance_process:
         services.append(("Compliance Agent", compliance_process))
@@ -101,7 +101,7 @@ def main():
         print("   - Communication Agent: http://localhost:8001/docs")
         print("   - Orchestration Service: http://localhost:8002/docs")
         print("   - Verification Agent: http://localhost:8003/docs")
-        print("   - Compliance Agent: http://localhost:8003/docs")
+        print("   - Compliance Agent: http://localhost:8004/docs")
     else:
         print("\n⚠️  Some services failed to start. Check the error messages above.")
     
