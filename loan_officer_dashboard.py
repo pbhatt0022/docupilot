@@ -37,26 +37,27 @@ try:
 except Exception:
     pass
 
-# Microsoft Fluent UI color palette
 PRIMARY_BLUE = "#0078D4"
 NEUTRAL_GREY = "#F3F2F1"
-DARK_GREY = "#605E5C"
+DARK_GREY = "#222222"  # Darker text color
 WHITE = "#FFFFFF"
 
 # Custom CSS for Microsoft look
 st.markdown(
     f"""
     <style>
-    html, body, [class*='css']  {{
+    html, body, [class*='css'] {{
         font-family: 'Segoe UI', 'Roboto', 'Helvetica Neue', Arial, sans-serif;
         background-color: {NEUTRAL_GREY};
+        color: rgba(0, 0, 0, 1) !important;
     }}
     .stApp {{
         background-color: {NEUTRAL_GREY};
+        color: rgba(0, 0, 0, 1) !important;
     }}
     .main-header {{
         background: {WHITE};
-        color: {DARK_GREY};
+        color: #000 !important;
         padding: 2rem 2rem 1rem 2rem;
         border-radius: 10px;
         margin-bottom: 1.5rem;
@@ -71,7 +72,7 @@ st.markdown(
     }}
     .main-header p {{
         font-size: 1rem;
-        color: {DARK_GREY};
+        color: #000 !important;
         margin: 0.5rem 0 0 0;
     }}
     .card-container {{
@@ -81,6 +82,7 @@ st.markdown(
         padding: 1.5rem;
         margin-bottom: 1.5rem;
         border: 1px solid #E1DFDD;
+        color: #000 !important;
     }}
     .section-header {{
         color: {PRIMARY_BLUE};
@@ -89,6 +91,7 @@ st.markdown(
         margin-bottom: 1rem;
         border-bottom: 2px solid #E1DFDD;
         padding-bottom: 0.5rem;
+        color: #000 !important;
     }}
     .stButton > button {{
         background: {PRIMARY_BLUE};
@@ -157,13 +160,13 @@ st.markdown(
         margin-bottom: 1rem;
     }}
     .metric-title {{
-        color: {DARK_GREY};
+        color: #000 !important;
         font-size: 0.9rem;
         font-weight: 500;
         margin-bottom: 0.5rem;
     }}
     .metric-value {{
-        color: {PRIMARY_BLUE};
+        color: #000 !important;
         font-size: 2rem;
         font-weight: 700;
     }}
@@ -198,7 +201,7 @@ st.markdown(
     }}
     .ai-tool-widget p {{
         font-size: 1rem;
-        color: {DARK_GREY};
+        color: #000 !important;
         margin-bottom: 1.5rem;
     }}
     .clickable-widget {{
