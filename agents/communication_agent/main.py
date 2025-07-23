@@ -70,144 +70,97 @@ def format_eligibility_decision(decision: dict) -> dict:
 # --- EMAIL GENERATION HELPERS ---
 
 def generate_submission_email(customer_name: str) -> dict:
-    """
-    Generate email content for submission confirmation.
-    """
     subject = f"Loan Application Submitted - {customer_name}"
-    body = f"""
-Dear {customer_name},
-
-Thank you for submitting your loan application. We have received your application and will begin processing it shortly.
-
-You will receive updates as your application progresses through verification and eligibility checks.
-
-Best regards,
-Loan Processing Team
+    body_html = f"""
+    <p>Dear {customer_name},</p>
+    <p>Thank you for submitting your loan application. We have received your application and will begin processing it shortly.</p>
+    <p>You will receive updates as your application progresses through verification and eligibility checks.</p>
+    <p>Best regards,<br>Loan Processing Team</p>
     """
-    return {"subject": subject.strip(), "body": body.strip()}
+    return {"subject": subject.strip(), "body": body_html.strip()}
 
 def generate_verification_email(customer_name: str, missing_info: str = "") -> dict:
-    """
-    Generate email content for verification update.
-    If missing_info is provided, it will be included in the email.
-    """
     subject = f"Loan Application Verification Update - {customer_name}"
     if missing_info:
-        body = f"""
-Dear {customer_name},
-
-Your document verification is complete. However, the following information is missing or incomplete:
-{missing_info}
-
-Please provide the required information to proceed with your application.
-
-Best regards,
-Loan Processing Team
+        body_html = f"""
+        <p>Dear {customer_name},</p>
+        <p>Your document verification is complete. However, the following information is missing or incomplete:</p>
+        <ul><li>{missing_info}</li></ul>
+        <p>Please provide the required information to proceed with your application.</p>
+        <p>Best regards,<br>Loan Processing Team</p>
         """
     else:
-        body = f"""
-Dear {customer_name},
-
-Your documents have been successfully verified. No missing information was found.
-
-We will now proceed to the eligibility check. You will receive another update soon.
-
-Best regards,
-Loan Processing Team
+        body_html = f"""
+        <p>Dear {customer_name},</p>
+        <p>Your documents have been successfully verified. No missing information was found.</p>
+        <p>We will now proceed to the eligibility check. You will receive another update soon.</p>
+        <p>Best regards,<br>Loan Processing Team</p>
         """
-    return {"subject": subject.strip(), "body": body.strip()}
+    return {"subject": subject.strip(), "body": body_html.strip()}
 
 def generate_eligibility_email(customer_name: str, formatted_decision: dict) -> dict:
-    """
-    Generate email content for eligibility decision (approved, rejected, under review).
-    """
     status = formatted_decision["status"]
     reason = formatted_decision["reason"]
     missing_fields_text = formatted_decision["missing_fields_text"]
     flagged_text = formatted_decision["flagged_text"]
     if status == "APPROVED":
         subject = f"🎉 Loan Application Approved - {customer_name}"
-        body = f"""
-Dear {customer_name},
-
-We are pleased to inform you that your loan application has been APPROVED!
-
-📋 Decision Details:
-• Status: APPROVED
-• Reason: {reason}
-
-Next Steps:
-1. You will receive detailed loan terms within 2-3 business days
-2. Please review the terms and conditions carefully
-3. Contact our loan officer if you have any questions
-
-Thank you for choosing our services!
-
-Best regards,
-Loan Processing Team
+        body_html = f"""
+        <p>Dear {customer_name},</p>
+        <p>We are pleased to inform you that your loan application has been <b>APPROVED!</b></p>
+        <h4>📋 Decision Details:</h4>
+        <ul>
+          <li><b>Status:</b> APPROVED</li>
+          <li><b>Reason:</b> {reason}</li>
+        </ul>
+        <h4>Next Steps:</h4>
+        <ol>
+          <li>You will receive detailed loan terms within 2-3 business days</li>
+          <li>Please review the terms and conditions carefully</li>
+          <li>Contact our loan officer if you have any questions</li>
+        </ol>
+        <p>Thank you for choosing our services!</p>
+        <p>Best regards,<br>Loan Processing Team</p>
         """
     elif status == "REJECTED":
         subject = f"Loan Application Update - {customer_name}"
-        body = f"""
-Dear {customer_name},
-
-We regret to inform you that your loan application has been REJECTED.
-
-📋 Decision Details:
-• Status: REJECTED
-• Reason: {reason}{missing_fields_text}
-
-We understand this may be disappointing. If you believe there has been an error or if your circumstances have changed, you may:
-1. Request a review of your application
-2. Reapply after addressing the identified issues
-3. Contact our customer service for guidance
-
-Thank you for your interest in our services.
-
-Best regards,
-Loan Processing Team
+        body_html = f"""
+        <p>Dear {customer_name},</p>
+        <p>We regret to inform you that your loan application has been <b>REJECTED</b>.</p>
+        <h4>📋 Decision Details:</h4>
+        <ul>
+          <li><b>Status:</b> REJECTED</li>
+          <li><b>Reason:</b> {reason}{missing_fields_text}</li>
+        </ul>
+        <p>We understand this may be disappointing. If you believe there has been an error or if your circumstances have changed, you may:</p>
+        <ol>
+          <li>Request a review of your application</li>
+          <li>Reapply after addressing the identified issues</li>
+          <li>Contact our customer service for guidance</li>
+        </ol>
+        <p>Thank you for your interest in our services.</p>
+        <p>Best regards,<br>Loan Processing Team</p>
         """
     else:  # UNDER REVIEW
         subject = f"Loan Application Under Review - {customer_name}"
-        body = f"""
-Dear {customer_name},
-
-Your loan application is currently UNDER REVIEW.
-
-📋 Current Status:
-• Status: UNDER REVIEW
-• Reason: {reason}{missing_fields_text}{flagged_text}
-
-We are carefully evaluating your application and may need additional information. You will be contacted if:
-• Additional documents are required
-• Clarification is needed on any information
-• A decision has been reached
-
-We appreciate your patience during this process.
-
-Best regards,
-Loan Processing Team
+        body_html = f"""
+        <p>Dear {customer_name},</p>
+        <p>Your loan application is currently <b>UNDER REVIEW</b>.</p>
+        <p>Our team is assessing your documents and eligibility. You will receive an update soon.</p>
+        <p>Best regards,<br>Loan Processing Team</p>
         """
-    return {"subject": subject.strip(), "body": body.strip()}
+    return {"subject": subject.strip(), "body": body_html.strip()}
 
 def generate_decision_email(customer_name: str, decision: str, explanation: str = "") -> dict:
-    """
-    Generate email content for final decision (preapproved, approved, or rejected).
-    """
     subject = f"Loan Application Decision - {customer_name}"
-    body = f"""
-Dear {customer_name},
-
-We are writing to inform you that your loan application has been {decision.upper()}.
-
-{explanation}
-
-If you have any questions or require further clarification, please contact our support team.
-
-Best regards,
-Loan Processing Team
+    body_html = f"""
+    <p>Dear {customer_name},</p>
+    <p>We are writing to inform you that your loan application has been <b>{decision.upper()}</b>.</p>
+    <p>{explanation}</p>
+    <p>If you have any questions or require further clarification, please contact our support team.</p>
+    <p>Best regards,<br>Loan Processing Team</p>
     """
-    return {"subject": subject.strip(), "body": body.strip()}
+    return {"subject": subject.strip(), "body": body_html.strip()}
 
 # --- MAIN NOTIFICATION ENDPOINT ---
 

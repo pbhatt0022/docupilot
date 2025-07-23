@@ -363,10 +363,25 @@ if "active_tab" not in st.session_state:
     st.session_state.active_tab = 0
 
 # Clean tab navigation
-tab_names = ["📊 Overview", "📋 Application Review", "🤖 AI Tools", "💬 Document Assistant"]
+tab_names = ["📊 Overview", "📋 Application Review", "🤖 AI Tools", "💬 Document Assistant", "📋 Audit Trail"]
+
+# Add application status fetching
+@st.cache_data(ttl=30)
+def fetch_application_statuses():
+    try:
+        query = "SELECT * FROM c WHERE c.type = @type"
+        params = [{"name": "@type", "value": "application_status"}]
+        status_docs = list(container.query_items(query=query, parameters=params, enable_cross_partition_query=True))
+        return pd.DataFrame(status_docs) if status_docs else pd.DataFrame()
+    except Exception as e:
+        st.error(f"Error fetching application statuses: {e}")
+        return pd.DataFrame()
+
+# Load application statuses
+status_df = fetch_application_statuses()
 
 st.markdown('<div class="tab-container">', unsafe_allow_html=True)
-cols = st.columns(4)
+cols = st.columns(5)
 for i, tab_name in enumerate(tab_names):
     with cols[i]:
         if st.button(
@@ -386,6 +401,12 @@ if st.session_state.active_tab == 0:
     pending_docs = len(doc_df[doc_df['status'] == 'pending_review'])
     approved_docs = len(doc_df[doc_df['status'] == 'approved'])
     flagged_docs = len(doc_df[doc_df.get('flagged_by_ai', False) == True])
+    
+    # Application pipeline metrics
+    pipeline_metrics = {}
+    if not status_df.empty:
+        for stage in ["submitted", "classification_complete", "extraction_complete", "validation_complete", "eligibility_complete", "officer_review"]:
+            pipeline_metrics[stage] = len(status_df[status_df['stage'] == stage])
     
     # Loan metrics
     total_loan_amount = 0
@@ -421,6 +442,21 @@ if st.session_state.active_tab == 0:
         formatted_amount = f"₹{total_loan_amount:,.0f}" if total_loan_amount > 0 else "₹0"
         st.metric("Total Loan Amount", formatted_amount)
     
+    # Pipeline Status Overview
+    if pipeline_metrics:
+        st.markdown('<div class="section-header">Application Pipeline Status</div>', unsafe_allow_html=True)
+        
+        pipeline_cols = st.columns(3)
+        with pipeline_cols[0]:
+            st.metric("Ready for Review", pipeline_metrics.get("officer_review", 0))
+        with pipeline_cols[1]:
+            st.metric("In Processing", 
+                     pipeline_metrics.get("submitted", 0) + 
+                     pipeline_metrics.get("classification_complete", 0) + 
+                     pipeline_metrics.get("extraction_complete", 0))
+        with pipeline_cols[2]:
+            st.metric("Eligibility Complete", pipeline_metrics.get("eligibility_complete", 0))
+    
     # Recent Applications Table
     st.markdown('<div class="section-header">Recent Loan Applications</div>', unsafe_allow_html=True)
     
@@ -429,13 +465,23 @@ if st.session_state.active_tab == 0:
         summary_data = []
         for _, row in loan_app_df.iterrows():
             la = row.get('loan_application', {})
+            
+            # Get application status
+            app_status = "unknown"
+            if not status_df.empty:
+                app_status_rows = status_df[status_df['applicant_id'] == row.get('applicant_id')]
+                if not app_status_rows.empty:
+                    latest_status = app_status_rows.iloc[-1]
+                    app_status = f"{latest_status.get('stage', 'unknown')} ({latest_status.get('status', 'unknown')})"
+            
             summary_data.append({
                 'Applicant ID': row.get('applicant_id', ''),
                 'Loan Amount': f"₹{la.get('loan_amount', 0):,.0f}",
                 'Tenure': f"{la.get('tenure_months', 0)} months",
                 'Purpose': la.get('loan_purpose', ''),
                 'EMI': f"₹{la.get('emi', 0):,.0f}",
-                'Status': la.get('status', 'under review'),
+                'App Status': app_status,
+                'Loan Status': la.get('status', 'under review'),
                 'Submitted': la.get('submitted_at', '')[:10] if la.get('submitted_at') else ''
             })
         
@@ -515,6 +561,22 @@ elif st.session_state.active_tab == 1:
     
     with col_list:
         st.markdown(f'<div class="section-header">Documents ({len(filtered_doc_df)})</div>', unsafe_allow_html=True)
+        
+        # Show application status for selected applicant
+        if applicant_filter != "All Applicants" and not status_df.empty:
+            app_status_rows = status_df[status_df['applicant_id'] == applicant_filter]
+            if not app_status_rows.empty:
+                latest_status = app_status_rows.iloc[-1]
+                stage = latest_status.get('stage', 'unknown')
+                status = latest_status.get('status', 'unknown')
+                
+                status_color = "#107c10" if status == "success" else "#d13438" if status == "failed" else "#ffb900"
+                st.markdown(f"""
+                    <div style="background: white; padding: 1rem; border-radius: 8px; margin-bottom: 1rem; border-left: 4px solid {status_color};">
+                        <strong>Pipeline Status:</strong> {stage}<br>
+                        <strong>Status:</strong> {status}
+                    </div>
+                """, unsafe_allow_html=True)
         
         if not filtered_doc_df.empty:
             st.markdown('<div class="card-container" style="max-height: 500px; overflow-y: auto;">', unsafe_allow_html=True)
@@ -633,6 +695,37 @@ elif st.session_state.active_tab == 1:
                     updated = clean_cosmos_document(updated)
                     print("CLEANED DOCUMENT:", updated)
                     container.upsert_item(updated)
+                    
+                    # Log officer action
+                    from agents.audit.audit_logger import audit_officer_action
+                    audit_officer_action(
+                        applicant_id=row.get("applicant_id"),
+                        action_type="document_status_update",
+                        details={
+                            "document_id": row.get("id"),
+                            "file_name": row.get("file_name"),
+                            "old_status": row.get("status"),
+                            "new_status": new_status,
+                            "comments": new_comment
+                        },
+                        officer_id="officer_001"  # Should come from auth
+                    )
+                    
+                    # If approving/rejecting, trigger officer decision
+                    if new_status in ["approved", "rejected"] and row.get("applicant_id"):
+                        try:
+                            decision_payload = {
+                                "decision": new_status,
+                                "reason": new_comment or f"Document {new_status} by officer",
+                                "officer_id": "officer_001"  # This should come from authentication
+                            }
+                            requests.post(
+                                f"http://localhost:8002/officer-decision?applicant_id={row.get('applicant_id')}",
+                                json=decision_payload,
+                                timeout=10
+                            )
+                        except Exception as e:
+                            st.warning(f"Could not record officer decision: {e}")
                     
                     st.success("✅ Document updated successfully!")
                     st.cache_data.clear()
@@ -776,15 +869,29 @@ elif st.session_state.active_tab == 2:
     with st.expander("⚖️ Compliance Agent"):
         st.markdown("<p>Checks documents against regulatory standards and internal policies based on your query.</p>", unsafe_allow_html=True)
         compliance_query = st.text_area("Compliance query:", key="compliance_query")
-        if st.button("🔍 Run Compliance Check", disabled=not compliance_query, type="primary", use_container_width=True):
+        all_applicants = sorted(set(doc_df["applicant_id"].unique().tolist()))
+        selected_applicant = st.selectbox("Select Applicant", [""] + all_applicants, key="compliance_applicant")
+
+        if st.button("🔍 Run Compliance Check", disabled=not compliance_query or not selected_applicant, type="primary", use_container_width=True):
             with st.spinner("Running compliance check..."):
                 try:
-                    result = "Compliance check functionality is under development."
-                    st.markdown("---")
-                    st.markdown("### ⚖️ Compliance Check Results")
-                    st.markdown(f'<div class="alert alert-info">{result}</div>', unsafe_allow_html=True)
+                    response = requests.post(
+                        "http://localhost:8003/compliance-check",  # Update this if your endpoint is different
+                        json={
+                            "applicant_id": selected_applicant,
+                            "query": compliance_query
+                        },
+                        timeout=30
+                    )
+                    if response.status_code == 200:
+                        result = response.json()
+                        st.markdown("---")
+                        st.markdown("### ⚖️ Compliance Check Results")
+                        st.json(result)
+                    else:
+                        st.error(f"❌ Compliance agent error: {response.status_code} - {response.text}")
                 except Exception as e:
-                    st.error(f"❌ Compliance agent error: {e}")
+                    st.error(f"❌ Failed to contact compliance agent: {e}")
 
 # TAB 4: DOCUMENT ASSISTANT (RAG)
 elif st.session_state.active_tab == 3:
@@ -833,6 +940,141 @@ elif st.session_state.active_tab == 3:
     
     st.markdown('</div>', unsafe_allow_html=True)
 
+# TAB 5: AUDIT TRAIL
+elif st.session_state.active_tab == 4:
+    st.markdown('<div class="section-header">Audit Trail & Compliance</div>', unsafe_allow_html=True)
+    
+    # Audit trail filters
+    st.markdown('<div class="card-container">', unsafe_allow_html=True)
+    
+    col1, col2, col3 = st.columns(3)
+    
+    with col1:
+        all_applicants = sorted(set(doc_df["applicant_id"].unique().tolist() + loan_app_df["applicant_id"].unique().tolist()))
+        audit_applicant = st.selectbox("Select Applicant for Audit", [""] + all_applicants, key="audit_applicant")
+    
+    with col2:
+        event_types = ["All Events", "document_upload", "ai_decision", "officer_action", "notification_sent"]
+        audit_event_type = st.selectbox("Event Type", event_types, key="audit_event_type")
+    
+    with col3:
+        st.markdown("<br>", unsafe_allow_html=True)
+        generate_audit = st.button("📊 Generate Audit Report", disabled=not audit_applicant, type="primary")
+    
+    st.markdown('</div>', unsafe_allow_html=True)
+    
+    if generate_audit and audit_applicant:
+        with st.spinner("Generating audit report..."):
+            try:
+                from agents.audit.audit_logger import get_applicant_audit_report, AuditLogger
+                
+                # Get comprehensive audit report
+                audit_report = get_applicant_audit_report(audit_applicant)
+                
+                if "error" in audit_report:
+                    st.error(f"❌ {audit_report['error']}")
+                else:
+                    # Display audit summary
+                    st.markdown('<div class="section-header">Audit Summary</div>', unsafe_allow_html=True)
+                    
+                    col1, col2, col3, col4 = st.columns(4)
+                    with col1:
+                        st.metric("Total Events", audit_report.get("total_events", 0))
+                    with col2:
+                        user_actions = audit_report.get("events_by_category", {}).get("user_action", 0)
+                        st.metric("User Actions", user_actions)
+                    with col3:
+                        ai_processes = audit_report.get("events_by_category", {}).get("ai_process", 0)
+                        st.metric("AI Decisions", ai_processes)
+                    with col4:
+                        system_processes = audit_report.get("events_by_category", {}).get("system_process", 0)
+                        st.metric("System Events", system_processes)
+                    
+                    # Event breakdown
+                    st.markdown('<div class="section-header">Event Breakdown</div>', unsafe_allow_html=True)
+                    
+                    events_by_type = audit_report.get("events_by_type", {})
+                    if events_by_type:
+                        breakdown_df = pd.DataFrame(list(events_by_type.items()), columns=["Event Type", "Count"])
+                        st.bar_chart(breakdown_df.set_index("Event Type"))
+                    
+                    # Timeline
+                    st.markdown('<div class="section-header">Event Timeline</div>', unsafe_allow_html=True)
+                    
+                    timeline = audit_report.get("timeline", [])
+                    if timeline:
+                        # Filter by event type if specified
+                        if audit_event_type != "All Events":
+                            timeline = [event for event in timeline if event.get("event_type") == audit_event_type]
+                        
+                        st.markdown('<div class="card-container">', unsafe_allow_html=True)
+                        for event in timeline[:20]:  # Show last 20 events
+                            timestamp = event.get("timestamp", "")[:19].replace("T", " ")
+                            event_type = event.get("event_type", "unknown")
+                            category = event.get("category", "unknown")
+                            summary = event.get("summary", "No summary available")
+                            
+                            # Color code by category
+                            color = "#0078D4" if category == "user_action" else "#107c10" if category == "ai_process" else "#ffb900"
+                            
+                            st.markdown(f"""
+                                <div style="border-left: 4px solid {color}; padding: 0.5rem 1rem; margin-bottom: 0.5rem; background: #f8f9fa; border-radius: 4px;">
+                                    <strong>{timestamp}</strong> - {event_type}<br>
+                                    <span style="color: #605e5c;">{summary}</span>
+                                </div>
+                            """, unsafe_allow_html=True)
+                        
+                        if len(timeline) > 20:
+                            st.info(f"Showing 20 most recent events. Total events: {len(timeline)}")
+                        
+                        st.markdown('</div>', unsafe_allow_html=True)
+                    
+                    # Download full audit report
+                    st.markdown('<div class="section-header">Export Options</div>', unsafe_allow_html=True)
+                    
+                    col_json, col_csv = st.columns(2)
+                    
+                    with col_json:
+                        audit_json = json.dumps(audit_report, indent=2, default=str)
+                        st.download_button(
+                            label="📥 Download Full Report (JSON)",
+                            data=audit_json,
+                            file_name=f"{audit_applicant}_audit_report.json",
+                            mime="application/json"
+                        )
+                    
+                    with col_csv:
+                        if timeline:
+                            timeline_df = pd.DataFrame(timeline)
+                            csv = timeline_df.to_csv(index=False)
+                            st.download_button(
+                                label="📥 Download Timeline (CSV)",
+                                data=csv,
+                                file_name=f"{audit_applicant}_timeline.csv",
+                                mime="text/csv"
+                            )
+                
+            except Exception as e:
+                st.error(f"❌ Error generating audit report: {e}")
+    
+    # Compliance queries
+    st.markdown('<div class="section-header">Compliance Queries</div>', unsafe_allow_html=True)
+    
+    st.markdown('<div class="card-container">', unsafe_allow_html=True)
+    st.markdown("**Common Compliance Questions:**")
+    
+    compliance_queries = [
+        "Show all AI decisions that were overridden by officers",
+        "List applications where required documents were missing",
+        "Find all rejected applications and their reasons",
+        "Show notification failures in the last 30 days"
+    ]
+    
+    for query in compliance_queries:
+        if st.button(f"🔍 {query}", key=f"compliance_{query[:20]}"):
+            st.info(f"Compliance query: {query} - Implementation pending")
+    
+    st.markdown('</div>', unsafe_allow_html=True)
 # Clean footer
 st.markdown("---")
 st.markdown(

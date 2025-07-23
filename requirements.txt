@@ -27,3 +27,5 @@ azure-ai-ml==1.15.0
 azure-ai-resources==1.0.0b8
 marshmallow==3.20.1
 opencensus-ext-azure
+azure-identity>=1.14.0  # Needed for DefaultAzureCredential in agents/verification_agent/agent.py
+azure-ai-projects==0.1.0b1  # Needed for AIProjectClient and related Azure AI features
